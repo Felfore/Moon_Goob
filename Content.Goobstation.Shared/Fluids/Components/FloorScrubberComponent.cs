@@ -6,6 +6,7 @@ namespace Content.Goobstation.Shared.Fluids.Components;
 
 /// <summary>
 ///     Component for an entity that can scrub decals and vacuum puddles.
+///     Uses two item slots for modular fluid containers (e.g., buckets, beakers).
 /// </summary>
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState]
 public sealed partial class FloorScrubberComponent : Component
@@ -17,16 +18,16 @@ public sealed partial class FloorScrubberComponent : Component
     public bool CleaningEnabled;
 
     /// <summary>
-    ///     The solution name for the clean water tank.
+    ///     The item slot ID for the clean water container.
     /// </summary>
     [DataField]
-    public string TankSolutionName = "tank";
+    public string TankSlotId = "tank_slot";
 
     /// <summary>
-    ///     The solution name for the waste fluid tank.
+    ///     The item slot ID for the waste fluid container.
     /// </summary>
     [DataField]
-    public string WasteSolutionName = "waste";
+    public string WasteSlotId = "waste_slot";
 
     /// <summary>
     ///     Amount of water used per decal cleaned.
@@ -45,6 +46,12 @@ public sealed partial class FloorScrubberComponent : Component
     /// </summary>
     [DataField]
     public float SpeedMultiplier = 0.5f;
+
+    /// <summary>
+    ///     The distance in front of the scrubber to clean.
+    /// </summary>
+    [DataField]
+    public float CleaningRange = 1.0f;
 
     /// <summary>
     ///     The action used to toggle cleaning mode.

@@ -1,6 +1,10 @@
-- type: instantAction
+- type: entity
+  parent: BaseAction
   id: ActionFloorScrubberToggle
   name: action-name-floor-scrubber-toggle
   description: action-desc-floor-scrubber-toggle
-  icon: { sprite: Objects/Vehicles/janicart.rsi, state: idle } # Placeholder icon
-  event: !type:FloorScrubberToggleActionEvent
+  components:
+  - type: Action
+    icon: { sprite: Objects/Vehicles/janicart.rsi, state: vehicle } # TODO: Replace with floor scrubber sprite
+  - type: InstantAction
+    event: !type:FloorScrubberToggleActionEvent

@@ -2,32 +2,71 @@
   parent: BaseVehicle
   id: VehicleScrubber
   name: floor scrubber
-  description: A janitorial vehicle used to clean and vacuum large areas of floor.
+  description: A janitorial vehicle used to clean and vacuum large areas of floor. Insert a water container and a waste container to operate.
   components:
   - type: Sprite
-    sprite: Objects/Vehicles/janicart.rsi
-    layers:
-    - state: idle
-      map: ["enum.VehicleState.Animated"]
+    sprite: Objects/Vehicles/janicart.rsi # TODO: Replace with dedicated floor scrubber sprite
+    state: vehicle
+    noRot: true
+    #layers:
+    #- state: idle
+    #  map: ["enum.VehicleState.Animated"]
   - type: FloorScrubber
-    tankSolutionName: tank
-    wasteSolutionName: waste
+    tankSlotId: tank_slot
+    wasteSlotId: waste_slot
     cleaningAmount: 2
     vacuumAmount: 5
     speedMultiplier: 0.5
-  - type: SolutionContainerManager
-    solutions:
-      tank:
-        maxVol: 100
-        reagents:
-        - ReagentId: Water
-          Quantity: 100
-      waste:
-        maxVol: 200
-  - type: RefillableSolution
-    solution: tank
-  - type: DrainableSolution
-    solution: waste
+  - type: ItemSlots
+    slots:
+      key_slot:
+        name: vehicle-slot-component-slot-name-keys
+        whitelist:
+          requireAll: true
+          tags:
+          - VehicleKey
+          - JanicartKeys
+        insertSound:
+          path: /Audio/Effects/Vehicle/vehiclestartup.ogg
+          params:
+            volume: -3
+      tank_slot:
+        name: floor-scrubber-slot-tank
+        whitelist:
+          tags:
+          - Bucket
+          components:
+          - DrainableSolution
+        insertOnInteract: true
+        priority: 5
+      waste_slot:
+        name: floor-scrubber-slot-waste
+        whitelist:
+          tags:
+          - Bucket
+          components:
+          - RefillableSolution
+        insertOnInteract: true
+        priority: 4
+  - type: ContainerContainer
+    containers:
+      tank_slot: !type:ContainerSlot {}
+      waste_slot: !type:ContainerSlot {}
+  # Physics overrides for heavy industrial feel
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeCircle
+          radius: 0.45
+        density: 350
+        mask:
+          - MobMask
+        layer:
+          - MobLayer
+        hard: true
   - type: MovementSpeedModifier
+    baseAcceleration: 3
+    baseFriction: 3.5
     baseWalkSpeed: 2.5
     baseSprintSpeed: 4
