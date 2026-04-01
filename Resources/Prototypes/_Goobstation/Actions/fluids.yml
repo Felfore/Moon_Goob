@@ -1,0 +1,6 @@
+- type: instantAction
+  id: ActionFloorScrubberToggle
+  name: action-name-floor-scrubber-toggle
+  description: action-desc-floor-scrubber-toggle
+  icon: { sprite: Objects/Vehicles/janicart.rsi, state: idle } # Placeholder icon
+  event: !type:FloorScrubberToggleActionEvent

@@ -1,0 +1,33 @@
+- type: entity
+  parent: BaseVehicle
+  id: VehicleScrubber
+  name: floor scrubber
+  description: A janitorial vehicle used to clean and vacuum large areas of floor.
+  components:
+  - type: Sprite
+    sprite: Objects/Vehicles/janicart.rsi
+    layers:
+    - state: idle
+      map: ["enum.VehicleState.Animated"]
+  - type: FloorScrubber
+    tankSolutionName: tank
+    wasteSolutionName: waste
+    cleaningAmount: 2
+    vacuumAmount: 5
+    speedMultiplier: 0.5
+  - type: SolutionContainerManager
+    solutions:
+      tank:
+        maxVol: 100
+        reagents:
+        - ReagentId: Water
+          Quantity: 100
+      waste:
+        maxVol: 200
+  - type: RefillableSolution
+    solution: tank
+  - type: DrainableSolution
+    solution: waste
+  - type: MovementSpeedModifier
+    baseWalkSpeed: 2.5
+    baseSprintSpeed: 4
