@@ -28,6 +28,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     [Dependency] protected readonly EntityLookupSystem Lookup = default!;
     [Dependency] protected readonly ItemSlotsSystem ItemSlots = default!;
     [Dependency] protected readonly SharedMapSystem MapSystem = default!;
+    [Dependency] private readonly MovementSpeedModifierSystem _movementSpeed = default!;
     [Dependency] protected readonly SharedPuddleSystem PuddleSystem = default!;
     [Dependency] protected readonly SharedSolutionContainerSystem SolutionContainer = default!;
     [Dependency] private readonly IGameTiming _timing = default!;
@@ -64,7 +65,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         ent.Comp.CleaningEnabled = !ent.Comp.CleaningEnabled;
         Dirty(ent);
 
-        RaiseLocalEvent(ent, new RefreshMovementSpeedModifiersEvent());
+        _movementSpeed.RefreshMovementSpeedModifiers(ent);
         args.Handled = true;
     }
 

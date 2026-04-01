@@ -30,6 +30,8 @@ using Content.Shared.Destructible;
 using Content.Goobstation.Maths.FixedPoint;
 using Content.Shared.Damage;
 using Content.Shared.Actions.Components;
+using Robust.Shared.Physics.Components;
+using Robust.Shared.Physics.Systems;
 
 namespace Content.Goobstation.Shared.Vehicles;
 
@@ -41,6 +43,7 @@ public abstract partial class SharedVehicleSystem : EntitySystem
     [Dependency] private readonly SharedAudioSystem _audio = default!;
     [Dependency] private readonly SharedBuckleSystem _buckle = default!;
     [Dependency] private readonly SharedMoverController _mover = default!;
+    [Dependency] private readonly SharedPhysicsSystem _physics = default!;
     [Dependency] private readonly SharedVirtualItemSystem _virtualItem = default!;
     [Dependency] private readonly SharedTransformSystem _transform = default!;
 
@@ -234,6 +237,27 @@ public abstract partial class SharedVehicleSystem : EntitySystem
     private void Mount(EntityUid driver, EntityUid vehicle)
     {
         _mover.SetRelay(driver, vehicle);
+
+        // Bug workaround: TileFrictionController applies tile friction as physics damping
+        // (LinearDamping/AngularDamping) to all awake Dynamic bodies every tick — UNLESS
+        // the entity is mob-moved (UseMobMovement returns true), in which case it's skipped.
+        //
+        // The damping value is: TileFrictionModifier CVar (8.0) × tile friction (~1.0)
+        //   × MovementSpeedModifierComponent.BaseFriction (via TileFrictionEvent/OnTileFriction).
+        //
+        // When a vehicle is being pulled or idle, UseMobMovement is false, so the controller
+        // sets damping to this high value. When a driver mounts, UseMobMovement becomes true
+        // and the controller starts skipping the entity — but never resets the damping.
+        // The stale high damping persists and fights all movement.
+        //
+        // Severity scales with BaseFriction: ATV (0.2) → damping ~2.4 (barely noticeable),
+        // floor scrubber (2.0) → damping ~24 (virtually immobile).
+        if (TryComp<PhysicsComponent>(vehicle, out var body))
+        {
+            // 0.2f is the default field value from PhysicsComponent.LinearDamping / AngularDamping.
+            _physics.SetLinearDamping(vehicle, body, 0.2f);
+            _physics.SetAngularDamping(vehicle, body, 0.2f);
+        }
 
         if (HasComp<TileMovementComponent>(driver))
             EnsureComp<TileMovementComponent>(vehicle);
