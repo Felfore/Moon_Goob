@@ -19,7 +19,7 @@
   description: action-desc-floor-scrubber-dump-drain
   components:
   - type: Action
-    icon: { sprite: Interface/VerbIcons/eject.svg.192dpi.png }
+    icon: Interface/VerbIcons/eject.svg.192dpi.png
   - type: InstantAction
     event: !type:FloorScrubberDumpDrainActionEvent
 
