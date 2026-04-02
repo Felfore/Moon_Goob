@@ -187,21 +187,22 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         if (!TryComp<MapGridComponent>(gridUid, out var grid))
             return;
 
-        // Get the tile in front of the scrubber.
-        var rotation = xform.LocalRotation;
-        var frontPos = xform.LocalPosition + rotation.ToVec() * scrubber.CleaningRange;
-        var frontCoords = new EntityCoordinates(gridUid, frontPos);
-        var tileIndices = MapSystem.LocalToTile(gridUid, grid, frontCoords);
+        // Get the center of the tile the scrubber is currently on.
+        var tileIndices = MapSystem.LocalToTile(gridUid, grid, xform.Coordinates);
         var tileCenter = MapSystem.GridTileToLocal(gridUid, grid, tileIndices).Position;
 
+        // A radius of 1.1f hits the current tile (dist 0) and cardinals (dist 1.0) 
+        // while skipping diagonals (dist 1.41).
+        var crossRadius = 1.1f;
+
         // 1. Vacuum Logic — suck puddles into the waste tank
-        VacuumTile(ent, gridUid, tileCenter);
+        VacuumTile(ent, gridUid, tileCenter, crossRadius);
 
         // 2. Scrubbing Logic — clean decals using water from the clean tank
-        ScrubTile(ent, gridUid, tileCenter);
+        ScrubTile(ent, gridUid, tileCenter, crossRadius);
     }
 
-    private void VacuumTile(Entity<FloorScrubberComponent, TransformComponent> ent, EntityUid gridUid, Vector2 tileCenter)
+    private void VacuumTile(Entity<FloorScrubberComponent, TransformComponent> ent, EntityUid gridUid, Vector2 tileCenter, float radius)
     {
         var (uid, scrubber, _) = ent;
 
@@ -214,7 +215,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         var frontCoords = new EntityCoordinates(gridUid, tileCenter);
         var frontMap = Transform.ToMapCoordinates(frontCoords);
 
-        foreach (var puddleUid in Lookup.GetEntitiesInRange<PuddleComponent>(frontMap, 0.5f))
+        foreach (var puddleUid in Lookup.GetEntitiesInRange<PuddleComponent>(frontMap, radius))
         {
             if (!SolutionContainer.TryGetSolution(puddleUid.Owner, "puddle", out var puddleSolnEnt, out var puddleSolution))
                 continue;
@@ -228,7 +229,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
     }
 
-    private void ScrubTile(Entity<FloorScrubberComponent, TransformComponent> ent, EntityUid gridUid, Vector2 tileCenter)
+    private void ScrubTile(Entity<FloorScrubberComponent, TransformComponent> ent, EntityUid gridUid, Vector2 tileCenter, float radius)
     {
         var (uid, scrubber, _) = ent;
 
@@ -239,7 +240,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             return;
 
         // Find cleanable decals.
-        var decals = DecalSystem.GetDecalsInRange(gridUid, tileCenter, scrubber.CleaningRange, d => d.Cleanable);
+        var decals = DecalSystem.GetDecalsInRange(gridUid, tileCenter, radius, d => d.Cleanable);
         if (decals.Count == 0)
             return;
 

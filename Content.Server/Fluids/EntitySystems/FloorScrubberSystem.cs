@@ -3,6 +3,7 @@ using Content.Goobstation.Shared.Fluids;
 using Content.Goobstation.Shared.Fluids.Components;
 using Content.Goobstation.Shared.Fluids.Systems;
 using Content.Server.DoAfter;
+using Content.Shared.Chemistry.Components;
 using Content.Shared.Chemistry.EntitySystems;
 using Content.Shared.DoAfter;
 using Content.Shared.Fluids.Components;
@@ -25,7 +26,6 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
     [Dependency] private readonly SharedPopupSystem _popup = default!;
     [Dependency] private readonly TagSystem _tag = default!;
 
-    private static readonly ProtoId<TagPrototype> ReagentTankTag = "ReagentTank";
 
     public override void Initialize()
     {
@@ -171,13 +171,13 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
 
         // Find the nearest drainable water source (sink, water tank, etc.)
         var scrubberPos = Transform.GetMapCoordinates(ent.Owner);
-        Entity<DrainComponent>? nearestSource = null;
+        Entity<ReagentTankComponent>? nearestSource = null;
         var nearestDist = float.MaxValue;
 
-        foreach (var candidate in Lookup.GetEntitiesInRange<DrainComponent>(scrubberPos, 1.5f))
+        foreach (var candidate in Lookup.GetEntitiesInRange<ReagentTankComponent>(scrubberPos, 1.5f))
         {
-            // Must be marked as a ReagentTank (sinks, water tanks — not floor drains which are waste receivers)
-            if (!_tag.HasTag(candidate.Owner, ReagentTankTag))
+            // Only refill from sinks (which have both a ReagentTank and a Drain component)
+            if (!HasComp<DrainComponent>(candidate.Owner))
                 continue;
 
             var dist = (Transform.GetWorldPosition(candidate.Owner) - Transform.GetWorldPosition(ent.Owner)).LengthSquared();
@@ -318,7 +318,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         foreach (var candidate in Lookup.GetEntitiesInRange<DrainComponent>(scrubberPos, 1.5f))
         {
             // Exclude sinks/reagent tanks — those are sources, not waste receivers.
-            if (_tag.HasTag(candidate.Owner, ReagentTankTag))
+            if (HasComp<ReagentTankComponent>(candidate.Owner))
                 continue;
 
             var dist = (Transform.GetWorldPosition(candidate.Owner) - Transform.GetWorldPosition(scrubber)).LengthSquared();
