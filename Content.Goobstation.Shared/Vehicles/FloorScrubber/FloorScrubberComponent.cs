@@ -1,4 +1,6 @@
 using Content.Goobstation.Maths.FixedPoint;
+using Robust.Shared.Audio;
+using Robust.Shared.GameObjects;
 using Robust.Shared.GameStates;
 using Robust.Shared.Serialization;
 
@@ -55,10 +57,54 @@ public sealed partial class FloorScrubberComponent : Component
     public float SpeedMultiplier = 0.5f;
 
     /// <summary>
-    ///     The distance in front of the scrubber to clean.
+    ///     The number of additional tiles to clean around the scrubber's current tile.
+    ///     0 = current tile only. 1 = +1 expansion (e.g. 3x3 square for Square shape).
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public int ExtraCleaningRange = 1;
+
+    /// <summary>
+    ///     The pattern in which the scrubber cleans tiles.
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public FloorScrubberShape CleaningShape = FloorScrubberShape.Cross;
+
+    /// <summary>
+    ///    Sound to play while the scrubber is actively cleaning.
     /// </summary>
     [DataField]
-    public float CleaningRange = 1.0f;
+    public SoundSpecifier? CleaningSound = new SoundPathSpecifier("/Audio/Ambience/Objects/server_fans.ogg");
+
+    /// <summary>
+    ///     Volume of the cleaning sound.
+    /// </summary>
+    [DataField]
+    public float CleaningSoundVolume = -6f;
+
+    /// <summary>
+    ///     Range of the cleaning sound.
+    /// </summary>
+    [DataField]
+    public float CleaningSoundRange = 5f;
+
+    /// <summary>
+    ///     The active audio stream for the cleaning sound.
+    /// </summary>
+    [NonSerialized]
+    public EntityUid? CleaningAudioStream;
+
+    /// <summary>
+    ///     How often (in seconds) the scrubber pulses its cleaning logic.
+    ///     Higher values improve performance.
+    /// </summary>
+    [DataField]
+    public float CleaningInterval = 0.33f;
+
+    /// <summary>
+    ///     Accumulator for throttling the cleaning logic.
+    /// </summary>
+    [DataField]
+    public float CleaningAccumulator;
 
     /// <summary>
     ///     The display period in seconds used for the tank gauge cooldown animation.
@@ -105,4 +151,12 @@ public enum FloorScrubberBucketMode : byte
 {
     PourIntoClean,
     DrawFromWaste
+}
+
+[Serializable, NetSerializable]
+public enum FloorScrubberShape : byte
+{
+    Square,
+    Cross,
+    Line
 }

@@ -114,7 +114,6 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
             var transferred = _solutionContainer.SplitSolution(wasteSolnEnt.Value, toTransfer);
             _solutionContainer.TryAddSolution(drain.Comp.Solution.Value, transferred);
             _audio.PlayPvs(drain.Comp.ManualDrainSound, drain.Owner);
-            _ambientSound.SetAmbience(drain.Owner, true);
         }
 
         // Spill the overflow next to the drain.

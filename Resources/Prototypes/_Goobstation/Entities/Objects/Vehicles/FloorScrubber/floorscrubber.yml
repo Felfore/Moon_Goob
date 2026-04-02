@@ -12,6 +12,11 @@
     cleaningAmount: 2
     vacuumAmount: 5
     speedMultiplier: 0.5
+    extraCleaningRange: 1
+    cleaningShape: Cross
+    cleaningSound: /Audio/Ambience/Objects/server_fans.ogg
+    cleaningSoundVolume: -6
+    cleaningSoundRange: 5
   - type: SolutionContainerManager
     solutions:
       cleanTank:
@@ -36,12 +41,6 @@
           path: /Audio/Effects/Vehicle/vehiclestartup.ogg
           params:
             volume: -3
-  - type: AmbientSound
-    enabled: false
-    volume: -6
-    range: 5
-    sound:
-      path: /Audio/Ambience/Objects/server_fans.ogg
   # Physics overrides for heavy industrial feel
   - type: Fixtures
     fixtures:

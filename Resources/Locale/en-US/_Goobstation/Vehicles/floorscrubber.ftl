@@ -43,3 +43,6 @@ floor-scrubber-verb-bucket-mode-to-waste = Switch to Draw Waste
 floor-scrubber-verb-bucket-mode-to-clean = Switch to Pour Clean Water
 floor-scrubber-bucket-poured = Poured {$amount}u into the clean tank.
 floor-scrubber-bucket-drawn = Drew {$amount}u of waste into the container.
+
+# Full tank notification
+floor-scrubber-waste-full = Waste tank full! Stopping scrubber...

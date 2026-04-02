@@ -17,11 +17,14 @@ using Content.Shared.Popups;
 using Robust.Shared.Audio;
 using Robust.Shared.Audio.Systems;
 using Robust.Shared.Containers;
+using Robust.Shared.GameObjects;
+using Robust.Shared.GameStates;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
 using Robust.Shared.Prototypes;
 using Robust.Shared.Timing;
 using Robust.Shared.Utility;
+using System;
 using System.Numerics;
 
 namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
@@ -62,6 +65,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         SubscribeLocalEvent<FloorScrubberComponent, StrappedEvent>(OnStrapped);
         SubscribeLocalEvent<FloorScrubberComponent, UnstrappedEvent>(OnUnstrapped);
         SubscribeLocalEvent<FloorScrubberComponent, EntInsertedIntoContainerMessage>(OnInsert);
+        SubscribeLocalEvent<FloorScrubberComponent, ComponentShutdown>(OnShutdown);
     }
 
     private void OnStrapped(Entity<FloorScrubberComponent> ent, ref StrappedEvent args)
@@ -87,7 +91,50 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         _actions.RemoveAction(args.Buckle.Owner, ent.Comp.FillAction);
         _actions.RemoveAction(args.Buckle.Owner, ent.Comp.CleanGaugeAction);
         _actions.RemoveAction(args.Buckle.Owner, ent.Comp.WasteGaugeAction);
+
+        if (ent.Comp.CleaningEnabled)
+            SetCleaningEnabled(ent, false);
     }
+
+    private void OnShutdown(Entity<FloorScrubberComponent> ent, ref ComponentShutdown args)
+    {
+        UpdateCleaningAudio(ent, false);
+    }
+
+    public void SetCleaningEnabled(Entity<FloorScrubberComponent> ent, bool enabled)
+    {
+        if (ent.Comp.CleaningEnabled == enabled)
+            return;
+
+        ent.Comp.CleaningEnabled = enabled;
+        UpdateCleaningAudio(ent, enabled);
+        Dirty(ent.Owner, ent.Comp);
+    }
+
+    private void UpdateCleaningAudio(Entity<FloorScrubberComponent> ent, bool enabled)
+    {
+        if (enabled)
+        {
+            if (ent.Comp.CleaningAudioStream != null || ent.Comp.CleaningSound == null)
+                return;
+
+            var audioParams = ent.Comp.CleaningSound.Params
+                .WithLoop(true)
+                .WithVolume(ent.Comp.CleaningSoundVolume)
+                .WithMaxDistance(ent.Comp.CleaningSoundRange);
+
+            ent.Comp.CleaningAudioStream = _audio.PlayPvs(ent.Comp.CleaningSound, ent.Owner, audioParams)?.Entity;
+        }
+        else
+        {
+            if (ent.Comp.CleaningAudioStream == null)
+                return;
+
+            _audio.Stop(ent.Comp.CleaningAudioStream);
+            ent.Comp.CleaningAudioStream = null;
+        }
+    }
+
 
     private void OnInsert(Entity<FloorScrubberComponent> ent, ref EntInsertedIntoContainerMessage args)
     {
@@ -95,8 +142,8 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         if (args.Container.ID != "key_slot")
             return;
 
-        // SharedVehicleSystem turns on the hum. If cleaning is off, we turn it back off.
-        _ambientSound.SetAmbience(ent.Owner, ent.Comp.CleaningEnabled);
+        // Ensure audio state matches for startup.
+        UpdateCleaningAudio(ent, ent.Comp.CleaningEnabled);
     }
 
     private void OnToggleAction(Entity<FloorScrubberComponent> ent, ref FloorScrubberToggleActionEvent args)
@@ -104,11 +151,8 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         if (args.Handled)
             return;
 
-        ent.Comp.CleaningEnabled = !ent.Comp.CleaningEnabled;
-        Dirty(ent);
-
+        SetCleaningEnabled(ent, !ent.Comp.CleaningEnabled);
         _movementSpeed.RefreshMovementSpeedModifiers(ent);
-        _ambientSound.SetAmbience(ent.Owner, ent.Comp.CleaningEnabled);
         args.Handled = true;
     }
 
@@ -244,6 +288,11 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         var query = EntityQueryEnumerator<FloorScrubberComponent, TransformComponent>();
         while (query.MoveNext(out var uid, out var scrubber, out var xform))
         {
+            UpdateCleaningAudio((uid, scrubber), scrubber.CleaningEnabled);
+
+            if (!scrubber.CleaningEnabled)
+                continue;
+
             // Gauge update (throttled)
             if (scrubber.CleanGaugeAction != null || scrubber.WasteGaugeAction != null)
             {
@@ -261,7 +310,13 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             if (xform.GridUid == null)
                 continue;
 
-            ProcessTileCleaning((uid, scrubber, xform));
+            scrubber.CleaningAccumulator += frameTime;
+            if (scrubber.CleaningAccumulator >= scrubber.CleaningInterval)
+            {
+                // Reset but keep remainder for smooth timings
+                scrubber.CleaningAccumulator -= scrubber.CleaningInterval;
+                ProcessTileCleaning((uid, scrubber, xform));
+            }
         }
     }
 
@@ -303,6 +358,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         if (!Resolve(ent, ref ent.Comp1, ref ent.Comp2))
             return;
 
+        var scrubber = ent.Comp1;
         var xform = ent.Comp2;
         if (xform.GridUid == null)
             return;
@@ -311,78 +367,117 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         if (!TryComp<MapGridComponent>(gridUid, out var grid))
             return;
 
-        // Get the center of the tile the scrubber is currently on.
-        var tileIndices = _map.LocalToTile(gridUid, grid, xform.Coordinates);
-        var tileCenter = _map.GridTileToLocal(gridUid, grid, tileIndices).Position;
-
-        // A radius of 1.1f hits the current tile (dist 0) and cardinals (dist 1.0) 
-        // while skipping diagonals (dist 1.41).
-        var crossRadius = 1.1f;
-
-        // 1. Vacuum Logic — suck puddles into the waste tank
-        VacuumTile(ent, gridUid, tileCenter, crossRadius);
-
-        // 2. Scrubbing Logic — clean decals using water from the clean tank
-        ScrubTile(ent, gridUid, tileCenter, crossRadius);
-    }
-
-    private void VacuumTile(Entity<FloorScrubberComponent?, TransformComponent?> ent, EntityUid gridUid, Vector2 tileCenter, float radius)
-    {
-        if (!Resolve(ent, ref ent.Comp1))
-            return;
-
-        var scrubber = ent.Comp1;
-        if (!_solutionContainer.TryGetSolution(ent.Owner, scrubber.WasteSolutionName, out var wasteSolnEnt, out var wasteSolution))
-            return;
-
-        if (wasteSolution.AvailableVolume <= 0)
-            return;
-
-        var frontCoords = new EntityCoordinates(gridUid, tileCenter);
-        var frontMap = _transform.ToMapCoordinates(frontCoords);
-
-        foreach (var puddleUid in _lookup.GetEntitiesInRange<PuddleComponent>(frontMap, radius))
+        // Verify we aren't full. We don't auto-stop on clean-empty as it can still vacuum.
+        if (!_solutionContainer.TryGetSolution(ent.Owner, scrubber.WasteSolutionName, out var wasteSolnEnt, out var wasteSolution) ||
+            wasteSolution.AvailableVolume <= 0)
         {
-            if (!_solutionContainer.TryGetSolution(puddleUid.Owner, "puddle", out var puddleSolnEnt, out var puddleSolution))
-                continue;
-
-            var drawAmount = FixedPoint2.Min(scrubber.VacuumAmount, puddleSolution.Volume, wasteSolution.AvailableVolume);
-            if (drawAmount <= 0)
-                continue;
-
-            var removed = _solutionContainer.SplitSolution(puddleSolnEnt.Value, drawAmount);
-            _solutionContainer.TryAddSolution(wasteSolnEnt.Value, removed);
-        }
-    }
-
-    private void ScrubTile(Entity<FloorScrubberComponent?, TransformComponent?> ent, EntityUid gridUid, Vector2 tileCenter, float radius)
-    {
-        if (!Resolve(ent, ref ent.Comp1))
+            SetCleaningEnabled((ent.Owner, scrubber), false);
+            _popup.PopupEntity(Loc.GetString("floor-scrubber-waste-full"), ent.Owner);
             return;
-
-        var scrubber = ent.Comp1;
-        if (!_solutionContainer.TryGetSolution(ent.Owner, scrubber.CleanSolutionName, out var cleanSolnEnt, out var cleanSolution))
-            return;
-
-        if (cleanSolution.Volume < scrubber.CleaningAmount)
-            return;
-
-        // Find cleanable decals.
-        var decals = _decal.GetDecalsInRange(gridUid, tileCenter, radius, d => d.Cleanable);
-        if (decals.Count == 0)
-            return;
-
-        // We found something to clean!
-        foreach (var (decalId, _) in decals)
-        {
-            _decal.RemoveDecal(gridUid, decalId);
         }
 
-        // Consume water from the clean tank.
-        var water = _solutionContainer.SplitSolution(cleanSolnEnt.Value, scrubber.CleaningAmount);
+        // 1. Determine which tiles we are cleaning.
+        var targetTiles = new HashSet<Vector2i>();
+        var centerTile = _map.LocalToTile(gridUid, grid, xform.Coordinates);
+        var range = scrubber.ExtraCleaningRange;
 
-        // Spill tiny water puddle.
-        var coords = new EntityCoordinates(gridUid, tileCenter);
-        _puddle.TrySpillAt(coords, water, out _);
+        switch (scrubber.CleaningShape)
+        {
+            case FloorScrubberShape.Square:
+                for (var x = -range; x <= range; x++)
+                {
+                    for (var y = -range; y <= range; y++)
+                    {
+                        targetTiles.Add(centerTile + new Vector2i(x, y));
+                    }
+                }
+                break;
+
+            case FloorScrubberShape.Cross:
+                targetTiles.Add(centerTile);
+                for (var i = 1; i <= range; i++)
+                {
+                    targetTiles.Add(centerTile + new Vector2i(i, 0));
+                    targetTiles.Add(centerTile + new Vector2i(-i, 0));
+                    targetTiles.Add(centerTile + new Vector2i(0, i));
+                    targetTiles.Add(centerTile + new Vector2i(0, -i));
+                }
+                break;
+
+            case FloorScrubberShape.Line:
+                targetTiles.Add(centerTile);
+                // Calculate perpendicular direction based on scrubber rotation.
+                var rotation = _transform.GetWorldRotation(ent.Owner);
+                var worldVec = rotation.ToVec();
+                var perpDir = new Vector2(-worldVec.Y, worldVec.X);
+                // Snap to best cardinal for logic simplicity on grid.
+                var step = Vector2i.Zero;
+                if (Math.Abs(perpDir.X) > Math.Abs(perpDir.Y))
+                    step = new Vector2i(perpDir.X > 0 ? 1 : -1, 0);
+                else
+                    step = new Vector2i(0, perpDir.Y > 0 ? 1 : -1);
+
+                for (var i = 1; i <= range; i++)
+                {
+                    targetTiles.Add(centerTile + step * i);
+                    targetTiles.Add(centerTile - step * i);
+                }
+                break;
+        }
+
+        // 2. Perform spatial lookups for affected tiles.
+        // We use GetEntitiesInRange with a radius covering the grid-aligned square,
+        // then filter results precisely by the targetTiles set.
+        var lookupRadius = range * 1.5f + 0.1f;
+        var centerTileLocal = _map.GridTileToLocal(gridUid, grid, centerTile).Position;
+        var centerMap = _transform.ToMapCoordinates(new EntityCoordinates(gridUid, centerTileLocal));
+
+        // --- Vacuum Logic ---
+        if (wasteSolution.AvailableVolume > 0)
+        {
+            foreach (var puddle in _lookup.GetEntitiesInRange<PuddleComponent>(centerMap, lookupRadius))
+            {
+                var puddlePos = _map.LocalToTile(gridUid, grid, Transform(puddle.Owner).Coordinates);
+                if (!targetTiles.Contains(puddlePos))
+                    continue;
+
+                if (!_solutionContainer.TryGetSolution(puddle.Owner, "puddle", out var puddleSolnEnt, out var puddleSolution))
+                    continue;
+
+                var drawAmount = FixedPoint2.Min(scrubber.VacuumAmount, puddleSolution.Volume, wasteSolution.AvailableVolume);
+                if (drawAmount <= 0)
+                    continue;
+
+                var removed = _solutionContainer.SplitSolution(puddleSolnEnt.Value, drawAmount);
+                _solutionContainer.TryAddSolution(wasteSolnEnt.Value, removed);
+            }
+        }
+
+        // --- Scrubbing Logic ---
+        if (_solutionContainer.TryGetSolution(ent.Owner, scrubber.CleanSolutionName, out var cleanSolnEnt, out var cleanSolution) &&
+            cleanSolution.Volume >= scrubber.CleaningAmount)
+        {
+            var decals = _decal.GetDecalsInRange(gridUid, centerTileLocal, lookupRadius);
+            var anyCleaned = false;
+
+            foreach (var (decalId, decal) in decals)
+            {
+                if (!decal.Cleanable)
+                    continue;
+
+                var decalPos = _map.LocalToTile(gridUid, grid, new EntityCoordinates(gridUid, decal.Coordinates));
+                if (!targetTiles.Contains(decalPos))
+                    continue;
+
+                _decal.RemoveDecal(gridUid, decalId);
+                anyCleaned = true;
+            }
+
+            if (anyCleaned)
+            {
+                var water = _solutionContainer.SplitSolution(cleanSolnEnt.Value, scrubber.CleaningAmount);
+                _puddle.TrySpillAt(xform.Coordinates, water, out _);
+            }
+        }
     }
 }
