@@ -4,7 +4,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-namespace Content.Goobstation.Server.Footprints;
+namespace Content.Goobstation.Common.Footprints;
 
 [RegisterComponent]
 public sealed partial class NoFootprintsComponent : Component;
