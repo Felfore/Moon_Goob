@@ -8,9 +8,6 @@
     sprite: Objects/Vehicles/janicart.rsi # TODO: Replace with dedicated floor scrubber sprite
     state: vehicle
     noRot: true
-    #layers:
-    #- state: idle
-    #  map: ["enum.VehicleState.Animated"]
   - type: FloorScrubber
     cleaningAmount: 2
     vacuumAmount: 5
