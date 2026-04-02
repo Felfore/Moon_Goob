@@ -2,7 +2,7 @@ using Content.Shared.Actions;
 using Content.Shared.DoAfter;
 using Robust.Shared.Serialization;
 
-namespace Content.Goobstation.Shared.Fluids;
+namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
 
 public sealed partial class FloorScrubberToggleActionEvent : InstantActionEvent
 {

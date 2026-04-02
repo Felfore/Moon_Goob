@@ -1,17 +1,22 @@
-using Content.Goobstation.Shared.Fluids;
 using Content.Goobstation.Maths.FixedPoint;
-using Content.Goobstation.Shared.Fluids.Components;
 using Content.Shared.Actions;
 using Content.Shared.Audio;
 using Content.Shared.Buckle;
 using Content.Shared.Buckle.Components;
+using Content.Shared.Chemistry.Components;
 using Content.Shared.Chemistry.Components.SolutionManager;
 using Content.Shared.Chemistry.EntitySystems;
 using Content.Shared.Decals;
 using Content.Shared.Examine;
 using Content.Shared.Fluids.Components;
 using Content.Shared.Fluids;
+using Content.Shared.Movement.Events;
+using Content.Shared.Containers.ItemSlots;
 using Content.Shared.Movement.Systems;
+using Content.Shared.Popups;
+using Robust.Shared.Audio;
+using Robust.Shared.Audio.Systems;
+using Robust.Shared.Containers;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
 using Robust.Shared.Prototypes;
@@ -19,7 +24,7 @@ using Robust.Shared.Timing;
 using Robust.Shared.Utility;
 using System.Numerics;
 
-namespace Content.Goobstation.Shared.Fluids.Systems;
+namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
 
 public abstract class SharedFloorScrubberSystem : EntitySystem
 {
@@ -32,7 +37,9 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     [Dependency] protected readonly SharedPuddleSystem PuddleSystem = default!;
     [Dependency] protected readonly SharedSolutionContainerSystem SolutionContainer = default!;
     [Dependency] private readonly IGameTiming _timing = default!;
-    [Dependency] protected readonly SharedTransformSystem Transform = default!;
+    [Dependency] protected readonly SharedAudioSystem Audio = default!;
+    [Dependency] protected readonly SharedPopupSystem Popup = default!;
+    [Dependency] protected readonly SharedTransformSystem _transform = default!;
 
     private static readonly EntProtoId CleanActionId = "ActionFloorScrubberToggle";
     private static readonly EntProtoId DumpDrainActionId = "ActionFloorScrubberDumpDrain";
@@ -48,10 +55,13 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         base.Initialize();
 
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberToggleActionEvent>(OnToggleAction);
+        SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpFloorActionEvent>(OnDumpFloor);
+        SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberFillActionEvent>(OnFill);
         SubscribeLocalEvent<FloorScrubberComponent, RefreshMovementSpeedModifiersEvent>(OnRefreshSpeed);
         SubscribeLocalEvent<FloorScrubberComponent, ExaminedEvent>(OnExamine);
         SubscribeLocalEvent<FloorScrubberComponent, StrappedEvent>(OnStrapped);
         SubscribeLocalEvent<FloorScrubberComponent, UnstrappedEvent>(OnUnstrapped);
+        SubscribeLocalEvent<FloorScrubberComponent, EntInsertedIntoContainerMessage>(OnInsert);
     }
 
     private void OnStrapped(Entity<FloorScrubberComponent> ent, ref StrappedEvent args)
@@ -79,6 +89,16 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         _actions.RemoveAction(args.Buckle.Owner, ent.Comp.WasteGaugeAction);
     }
 
+    private void OnInsert(Entity<FloorScrubberComponent> ent, ref EntInsertedIntoContainerMessage args)
+    {
+        // Only care about the key slot
+        if (args.Container.ID != "key_slot")
+            return;
+
+        // SharedVehicleSystem turns on the hum. If cleaning is off, we turn it back off.
+        _ambientSound.SetAmbience(ent.Owner, ent.Comp.CleaningEnabled);
+    }
+
     private void OnToggleAction(Entity<FloorScrubberComponent> ent, ref FloorScrubberToggleActionEvent args)
     {
         if (args.Handled)
@@ -89,6 +109,105 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
 
         _movementSpeed.RefreshMovementSpeedModifiers(ent);
         _ambientSound.SetAmbience(ent.Owner, ent.Comp.CleaningEnabled);
+        args.Handled = true;
+    }
+
+    private void OnDumpFloor(Entity<FloorScrubberComponent> ent, ref FloorScrubberDumpFloorActionEvent args)
+    {
+        if (args.Handled)
+            return;
+
+        var user = args.Performer;
+
+        if (!SolutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out var wasteSolnEnt, out var waste)
+            || waste.Volume <= 0)
+        {
+            if (_timing.IsFirstTimePredicted)
+                Popup.PopupEntity(Loc.GetString("floor-scrubber-dump-floor-empty"), ent.Owner, user);
+            return;
+        }
+
+        var spill = SolutionContainer.SplitSolution(wasteSolnEnt.Value, waste.Volume);
+        PuddleSystem.TrySpillAt(_transform.GetMoverCoordinates(ent.Owner), spill, out _);
+
+        if (_timing.IsFirstTimePredicted)
+        {
+            Audio.PlayPvs(new SoundPathSpecifier("/Audio/Effects/Fluids/slosh.ogg"), ent.Owner);
+            Popup.PopupEntity(Loc.GetString("floor-scrubber-dump-floor-success"), ent.Owner, user);
+        }
+
+        args.Handled = true;
+    }
+
+    private void OnFill(Entity<FloorScrubberComponent> ent, ref FloorScrubberFillActionEvent args)
+    {
+        if (args.Handled)
+            return;
+
+        var user = args.Performer;
+
+        if (!SolutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out var cleanSolnEnt, out var cleanSoln))
+            return;
+
+        if (cleanSoln.AvailableVolume <= 0)
+        {
+            if (_timing.IsFirstTimePredicted)
+                Popup.PopupEntity(Loc.GetString("floor-scrubber-fill-full"), ent.Owner, user);
+            return;
+        }
+
+        // Find the nearest drainable water source (sink)
+        var scrubberPos = _transform.GetMapCoordinates(ent.Owner);
+        Entity<ReagentTankComponent>? nearestSource = null;
+        var nearestDist = float.MaxValue;
+
+        foreach (var candidate in Lookup.GetEntitiesInRange<ReagentTankComponent>(scrubberPos, 1.5f))
+        {
+            // Only refill from sinks (which have both a ReagentTank and a Drain component)
+            if (!HasComp<DrainComponent>(candidate.Owner))
+                continue;
+
+            var dist = (_transform.GetWorldPosition(candidate.Owner) - _transform.GetWorldPosition(ent.Owner)).LengthSquared();
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearestSource = candidate;
+            }
+        }
+
+        if (nearestSource == null)
+        {
+            if (_timing.IsFirstTimePredicted)
+                Popup.PopupEntity(Loc.GetString("floor-scrubber-fill-no-source"), ent.Owner, user);
+            return;
+        }
+
+        // Drain from the source's drainable solution into the clean tank.
+        if (!SolutionContainer.TryGetDrainableSolution(nearestSource.Value.Owner, out var sourceSolnEnt, out var sourceSoln))
+        {
+            if (_timing.IsFirstTimePredicted)
+                Popup.PopupEntity(Loc.GetString("floor-scrubber-fill-no-source"), ent.Owner, user);
+            return;
+        }
+
+        var toFill = FixedPoint2.Min(cleanSoln.AvailableVolume, sourceSoln.Volume);
+        if (toFill <= 0)
+        {
+            if (_timing.IsFirstTimePredicted)
+                Popup.PopupEntity(Loc.GetString("floor-scrubber-fill-no-source"), ent.Owner, user);
+            return;
+        }
+
+        var water = SolutionContainer.SplitSolution(sourceSolnEnt.Value, toFill);
+        SolutionContainer.TryAddSolution(cleanSolnEnt.Value, water);
+
+        if (_timing.IsFirstTimePredicted)
+        {
+            Audio.PlayPvs(new SoundPathSpecifier("/Audio/Effects/Fluids/glug.ogg"), ent.Owner);
+            Popup.PopupEntity(Loc.GetString("floor-scrubber-fill-success",
+                ("source", EntityManager.GetComponent<MetaDataComponent>(nearestSource.Value.Owner).EntityName)), ent.Owner, user);
+        }
+
         args.Handled = true;
     }
 
@@ -213,7 +332,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             return;
 
         var frontCoords = new EntityCoordinates(gridUid, tileCenter);
-        var frontMap = Transform.ToMapCoordinates(frontCoords);
+        var frontMap = _transform.ToMapCoordinates(frontCoords);
 
         foreach (var puddleUid in Lookup.GetEntitiesInRange<PuddleComponent>(frontMap, radius))
         {

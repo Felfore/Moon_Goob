@@ -8,8 +8,9 @@
   components:
   - type: Action
     icon: { sprite: Objects/Vehicles/janicart.rsi, state: vehicle } # TODO: Replace with floor scrubber sprite
-  - type: InstantAction
     useDelay: 1
+    predicted: true
+  - type: InstantAction
     event: !type:FloorScrubberToggleActionEvent
 
 - type: entity
@@ -20,6 +21,7 @@
   components:
   - type: Action
     icon: Interface/VerbIcons/eject.svg.192dpi.png
+    predicted: true
   - type: InstantAction
     event: !type:FloorScrubberDumpDrainActionEvent
 
@@ -30,7 +32,9 @@
   description: action-desc-floor-scrubber-dump-floor
   components:
   - type: Action
-    icon: { sprite: Objects/Specific/Janitorial/mopbucket.rsi, state: icon }
+    icon: { sprite: Objects/Specific/Janitorial/janitorial.rsi, state: mopbucket }
+    useDelay: 1
+    predicted: true
   - type: InstantAction
     event: !type:FloorScrubberDumpFloorActionEvent
 
@@ -41,7 +45,9 @@
   description: action-desc-floor-scrubber-fill
   components:
   - type: Action
-    icon: { sprite: Structures/Furniture/sink.rsi, state: sink_stem }
+    icon: { sprite: Structures/Furniture/sink.rsi, state: sink }
+    useDelay: 1
+    predicted: true
   - type: InstantAction
     event: !type:FloorScrubberFillActionEvent
 

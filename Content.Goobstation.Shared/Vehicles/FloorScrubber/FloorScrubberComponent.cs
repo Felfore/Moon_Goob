@@ -2,7 +2,7 @@ using Content.Goobstation.Maths.FixedPoint;
 using Robust.Shared.GameStates;
 using Robust.Shared.Serialization;
 
-namespace Content.Goobstation.Shared.Fluids.Components;
+namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
 
 /// <summary>
 ///     Component for an entity that can scrub decals and vacuum puddles.

@@ -1,7 +1,5 @@
 using Content.Goobstation.Maths.FixedPoint;
-using Content.Goobstation.Shared.Fluids;
-using Content.Goobstation.Shared.Fluids.Components;
-using Content.Goobstation.Shared.Fluids.Systems;
+using Content.Goobstation.Shared.Vehicles.FloorScrubber;
 using Content.Server.DoAfter;
 using Content.Shared.Chemistry.Components;
 using Content.Shared.Chemistry.EntitySystems;
@@ -17,7 +15,7 @@ using Robust.Shared.Audio.Systems;
 using Robust.Shared.Prototypes;
 using Robust.Shared.Serialization;
 
-namespace Content.Server.Fluids.EntitySystems;
+namespace Content.Server.Vehicles.FloorScrubber;
 
 public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
 {
@@ -32,8 +30,6 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         base.Initialize();
 
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpDrainActionEvent>(OnDumpDrain);
-        SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpFloorActionEvent>(OnDumpFloor);
-        SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberFillActionEvent>(OnFill);
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpDrainDoAfterEvent>(OnDumpDrainDoAfter);
         SubscribeLocalEvent<FloorScrubberComponent, GetVerbsEvent<AlternativeVerb>>(OnGetBucketVerb);
         SubscribeLocalEvent<FloorScrubberComponent, AfterInteractUsingEvent>(OnBucketInteract);
@@ -117,7 +113,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         if (overflow > 0)
         {
             var spill = SolutionContainer.SplitSolution(wasteSolnEnt.Value, overflow);
-            PuddleSystem.TrySpillAt(Transform.GetMoverCoordinates(drain.Owner), spill, out _);
+            PuddleSystem.TrySpillAt(_transform.GetMoverCoordinates(drain.Owner), spill, out _);
             _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-drain-overflow"), ent.Owner, user);
         }
         else
@@ -125,94 +121,6 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
             _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-drain-success"), ent.Owner, user);
         }
 
-        args.Handled = true;
-    }
-
-    // ── Dump to floor ──────────────────────────────────────────────────────────
-
-    private void OnDumpFloor(Entity<FloorScrubberComponent> ent, ref FloorScrubberDumpFloorActionEvent args)
-    {
-        if (args.Handled)
-            return;
-
-        var user = args.Performer;
-
-        if (!SolutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out var wasteSolnEnt, out var waste)
-            || waste.Volume <= 0)
-        {
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-floor-empty"), ent.Owner, user);
-            return;
-        }
-
-        var spill = SolutionContainer.SplitSolution(wasteSolnEnt.Value, waste.Volume);
-        PuddleSystem.TrySpillAt(Transform.GetMoverCoordinates(ent.Owner), spill, out _);
-        _audio.PlayPvs(new SoundPathSpecifier("/Audio/Effects/Fluids/slosh.ogg"), ent.Owner);
-        _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-floor-success"), ent.Owner, user);
-        args.Handled = true;
-    }
-
-    // ── Fill from source ───────────────────────────────────────────────────────
-
-    private void OnFill(Entity<FloorScrubberComponent> ent, ref FloorScrubberFillActionEvent args)
-    {
-        if (args.Handled)
-            return;
-
-        var user = args.Performer;
-
-        if (!SolutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out var cleanSolnEnt, out var cleanSoln))
-            return;
-
-        if (cleanSoln.AvailableVolume <= 0)
-        {
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-full"), ent.Owner, user);
-            return;
-        }
-
-        // Find the nearest drainable water source (sink, water tank, etc.)
-        var scrubberPos = Transform.GetMapCoordinates(ent.Owner);
-        Entity<ReagentTankComponent>? nearestSource = null;
-        var nearestDist = float.MaxValue;
-
-        foreach (var candidate in Lookup.GetEntitiesInRange<ReagentTankComponent>(scrubberPos, 1.5f))
-        {
-            // Only refill from sinks (which have both a ReagentTank and a Drain component)
-            if (!HasComp<DrainComponent>(candidate.Owner))
-                continue;
-
-            var dist = (Transform.GetWorldPosition(candidate.Owner) - Transform.GetWorldPosition(ent.Owner)).LengthSquared();
-            if (dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearestSource = candidate;
-            }
-        }
-
-        if (nearestSource == null)
-        {
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-no-source"), ent.Owner, user);
-            return;
-        }
-
-        // Drain from the source's drainable solution into the clean tank.
-        if (!SolutionContainer.TryGetDrainableSolution(nearestSource.Value.Owner, out var sourceSolnEnt, out var sourceSoln))
-        {
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-no-source"), ent.Owner, user);
-            return;
-        }
-
-        var toFill = FixedPoint2.Min(cleanSoln.AvailableVolume, sourceSoln.Volume);
-        if (toFill <= 0)
-        {
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-no-source"), ent.Owner, user);
-            return;
-        }
-
-        var water = SolutionContainer.SplitSolution(sourceSolnEnt.Value, toFill);
-        SolutionContainer.TryAddSolution(cleanSolnEnt.Value, water);
-        _audio.PlayPvs(new SoundPathSpecifier("/Audio/Effects/Fluids/glug.ogg"), ent.Owner);
-        _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-success",
-            ("source", Name(nearestSource.Value.Owner))), ent.Owner, user);
         args.Handled = true;
     }
 
@@ -311,7 +219,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
     private bool TryGetNearestDrain(EntityUid scrubber, out Entity<DrainComponent> drain)
     {
         drain = default;
-        var scrubberPos = Transform.GetMapCoordinates(scrubber);
+        var scrubberPos = _transform.GetMapCoordinates(scrubber);
         var nearestDist = float.MaxValue;
         var found = false;
 
@@ -321,7 +229,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
             if (HasComp<ReagentTankComponent>(candidate.Owner))
                 continue;
 
-            var dist = (Transform.GetWorldPosition(candidate.Owner) - Transform.GetWorldPosition(scrubber)).LengthSquared();
+            var dist = (_transform.GetWorldPosition(candidate.Owner) - _transform.GetWorldPosition(scrubber)).LengthSquared();
             if (dist < nearestDist)
             {
                 nearestDist = dist;

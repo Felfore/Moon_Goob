@@ -34,7 +34,7 @@
           requireAll: true
           tags:
           - VehicleKey
-          - JanicartKeys
+          - FloorScrubberKeys
         insertSound:
           path: /Audio/Effects/Vehicle/vehiclestartup.ogg
           params:
@@ -63,3 +63,17 @@
     baseFriction: 2.0
     baseWalkSpeed: 2.5
     baseSprintSpeed: 4
+
+- type: entity
+  parent: BaseKey
+  id: VehicleKeyFloorScrubber
+  name: floor scrubber keys
+  description: The keys to a cleaner future.
+  components:
+  - type: Sprite
+    sprite: Objects/Vehicles/janicart.rsi
+    state: keys
+  - type: Tag
+    tags:
+    - VehicleKey
+    - FloorScrubberKeys
