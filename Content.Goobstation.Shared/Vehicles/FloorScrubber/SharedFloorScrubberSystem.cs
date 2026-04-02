@@ -8,12 +8,12 @@ using Content.Shared.Chemistry.Components.SolutionManager;
 using Content.Shared.Chemistry.EntitySystems;
 using Content.Shared.Decals;
 using Content.Shared.Examine;
-using Content.Shared.Fluids.Components;
-using Content.Shared.Fluids;
-using Content.Shared.Movement.Events;
 using Content.Shared.Containers.ItemSlots;
 using Content.Shared.Movement.Systems;
 using Content.Shared.Popups;
+using Content.Shared.Fluids;
+using Content.Shared.Fluids.Components;
+using Content.Goobstation.Common.Footprints;
 using Robust.Shared.Audio;
 using Robust.Shared.Audio.Systems;
 using Robust.Shared.Containers;
@@ -25,6 +25,7 @@ using Robust.Shared.Prototypes;
 using Robust.Shared.Timing;
 using Robust.Shared.Utility;
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
@@ -103,12 +104,15 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
 
     public void SetCleaningEnabled(Entity<FloorScrubberComponent> ent, bool enabled)
     {
-        if (ent.Comp.CleaningEnabled == enabled)
-            return;
-
         ent.Comp.CleaningEnabled = enabled;
         UpdateCleaningAudio(ent, enabled);
-        Dirty(ent.Owner, ent.Comp);
+
+        // Water Trail Logic: Use the NoFootprintsComponent to stop trails when cleaning is OFF.
+        // Wait! User said they want trails ALWAYS, but clean trails when ON and dirty when OFF.
+        // So we DON'T toggle NoFootprints anymore, but let's keep the option open for the sync logic.
+        
+        _movementSpeed.RefreshMovementSpeedModifiers(ent);
+        Dirty(ent);
     }
 
     private void UpdateCleaningAudio(Entity<FloorScrubberComponent> ent, bool enabled)
@@ -152,7 +156,6 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             return;
 
         SetCleaningEnabled(ent, !ent.Comp.CleaningEnabled);
-        _movementSpeed.RefreshMovementSpeedModifiers(ent);
         args.Handled = true;
     }
 
@@ -432,31 +435,85 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         var centerTileLocal = _map.GridTileToLocal(gridUid, grid, centerTile).Position;
         var centerMap = _transform.ToMapCoordinates(new EntityCoordinates(gridUid, centerTileLocal));
 
+        _solutionContainer.TryGetSolution(ent.Owner, scrubber.CleanSolutionName, out var cleanSolnEnt, out var cleanSolution);
+
         // --- Vacuum Logic ---
         if (wasteSolution.AvailableVolume > 0)
         {
-            foreach (var puddle in _lookup.GetEntitiesInRange<PuddleComponent>(centerMap, lookupRadius))
+            var entities = _lookup.GetEntitiesInRange(centerMap, lookupRadius);
+            foreach (var entity in entities)
             {
-                var puddlePos = _map.LocalToTile(gridUid, grid, Transform(puddle.Owner).Coordinates);
-                if (!targetTiles.Contains(puddlePos))
+                if (Deleted(entity) || !TryComp<TransformComponent>(entity, out var entXform))
                     continue;
 
-                if (!_solutionContainer.TryGetSolution(puddle.Owner, "puddle", out var puddleSolnEnt, out var puddleSolution))
+                var pos = _map.LocalToTile(gridUid, grid, entXform.Coordinates);
+                if (!targetTiles.Contains(pos))
                     continue;
 
-                var drawAmount = FixedPoint2.Min(scrubber.VacuumAmount, puddleSolution.Volume, wasteSolution.AvailableVolume);
-                if (drawAmount <= 0)
-                    continue;
+                // 1. Filter: If it's a footprint, check if it's "filthy" relative to our own cleaning fluid.
+                // If it only contains things that are in our clean tank (mostly water), we skip it.
+                var isFootprint = HasComp<FootprintComponent>(entity);
+                if (isFootprint)
+                {
+                    if (_solutionContainer.TryGetSolution(entity, "print", out _, out var printSol))
+                    {
+                        var isFilthy = false;
+                        foreach (var reagent in printSol.Contents)
+                        {
+                            if (cleanSolution == null || !cleanSolution.Contents.Any(r => r.Reagent.Prototype == reagent.Reagent.Prototype))
+                            {
+                                isFilthy = true;
+                                break;
+                            }
+                        }
 
-                var removed = _solutionContainer.SplitSolution(puddleSolnEnt.Value, drawAmount);
-                _solutionContainer.TryAddSolution(wasteSolnEnt.Value, removed);
+                        if (!isFilthy)
+                            continue;
+                    }
+                }
+
+                if (isFootprint)
+                {
+                    RaiseLocalEvent(entity, new FootprintCleanEvent());
+                }
+
+                // 2. Vacuum Puddle solutions
+                if (TryComp<PuddleComponent>(entity, out var puddle) &&
+                    _solutionContainer.TryGetSolution(entity, "puddle", out var puddleSolnEnt, out var puddleSolution))
+                {
+                    var drawAmount = FixedPoint2.Min(scrubber.VacuumAmount, puddleSolution.Volume, wasteSolution.AvailableVolume);
+                    if (drawAmount > 0)
+                    {
+                        var removed = _solutionContainer.SplitSolution(puddleSolnEnt.Value, drawAmount);
+                        _solutionContainer.TryAddSolution(wasteSolnEnt.Value, removed);
+                    }
+                }
             }
         }
 
         // --- Scrubbing Logic ---
-        if (_solutionContainer.TryGetSolution(ent.Owner, scrubber.CleanSolutionName, out var cleanSolnEnt, out var cleanSolution) &&
-            cleanSolution.Volume >= scrubber.CleaningAmount)
+        if (cleanSolnEnt != null && cleanSolution != null && cleanSolution.Volume >= scrubber.CleaningAmount)
         {
+            // Sync logic for the Water Trail:
+            // While cleaning is active and clean water is available, we force the 'print' solution to be filled with water.
+            // This dilutes/clears any other grime we've picked up, generating the "clean" trail requested by the user.
+            if (scrubber.CleaningEnabled && _solutionContainer.TryGetSolution(ent.Owner, "print", out var printSolnEnt))
+            {
+                // We keep a consistent small amount (e.g., 2u) in the print tank to draw from.
+                var targetAmount = FixedPoint2.New(2);
+                var currentAmount = _solutionContainer.GetTotalPrototypeQuantity(printSolnEnt.Value, "puddle"); // Dummy check or just volume.
+                
+                if (printSolnEnt.Value.Comp.Solution.Volume < targetAmount)
+                {
+                    var amount = FixedPoint2.Min(targetAmount - printSolnEnt.Value.Comp.Solution.Volume, cleanSolution.Volume);
+                    if (amount > 0)
+                    {
+                        var move = _solutionContainer.SplitSolution(cleanSolnEnt.Value, amount);
+                        _solutionContainer.TryAddSolution(printSolnEnt.Value, move);
+                    }
+                }
+            }
+
             var decals = _decal.GetDecalsInRange(gridUid, centerTileLocal, lookupRadius);
             var anyCleaned = false;
 

@@ -17,6 +17,9 @@
     cleaningSound: /Audio/Ambience/Objects/server_fans.ogg
     cleaningSoundVolume: -6
     cleaningSoundRange: 5
+  - type: FootprintOwner
+    bodyDistance: 0.75
+    maxBodyVolume: 10
   - type: SolutionContainerManager
     solutions:
       cleanTank:
@@ -26,6 +29,8 @@
           Quantity: 500
       wasteTank:
         maxVol: 1000
+      print:
+        maxVol: 10
   - type: DrainableSolution
     solution: wasteTank
   - type: ItemSlots
