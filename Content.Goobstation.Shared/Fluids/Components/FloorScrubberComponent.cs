@@ -6,7 +6,7 @@ namespace Content.Goobstation.Shared.Fluids.Components;
 
 /// <summary>
 ///     Component for an entity that can scrub decals and vacuum puddles.
-///     Uses two item slots for modular fluid containers (e.g., buckets, beakers).
+///     Uses two large internal solution tanks: one for clean water, one for waste.
 /// </summary>
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState]
 public sealed partial class FloorScrubberComponent : Component
@@ -18,16 +18,23 @@ public sealed partial class FloorScrubberComponent : Component
     public bool CleaningEnabled;
 
     /// <summary>
-    ///     The item slot ID for the clean water container.
+    ///     The name of the internal clean water solution.
     /// </summary>
     [DataField]
-    public string TankSlotId = "tank_slot";
+    public string CleanSolutionName = "cleanTank";
 
     /// <summary>
-    ///     The item slot ID for the waste fluid container.
+    ///     The name of the internal waste solution.
     /// </summary>
     [DataField]
-    public string WasteSlotId = "waste_slot";
+    public string WasteSolutionName = "wasteTank";
+
+    /// <summary>
+    ///     Controls whether using a bucket on the scrubber pours into the clean tank
+    ///     or draws from the waste tank.
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public FloorScrubberBucketMode BucketMode = FloorScrubberBucketMode.PourIntoClean;
 
     /// <summary>
     ///     Amount of water used per decal cleaned.
@@ -54,8 +61,48 @@ public sealed partial class FloorScrubberComponent : Component
     public float CleaningRange = 1.0f;
 
     /// <summary>
-    ///     The action used to toggle cleaning mode.
+    ///     The display period in seconds used for the tank gauge cooldown animation.
+    ///     Remaining cooldown = fillFraction * GaugeDisplayPeriod → overlay = fill level.
     /// </summary>
     [DataField]
+    public float GaugeDisplayPeriod = 100f;
+
+    /// <summary>
+    ///     Accumulator for throttling gauge updates (~0.5s intervals).
+    /// </summary>
+    [DataField]
+    public float GaugeUpdateAccumulator;
+
+    // --- Action refs ---
+
+    [DataField]
     public EntityUid? CleanAction;
+
+    [DataField]
+    public EntityUid? DumpDrainAction;
+
+    [DataField]
+    public EntityUid? DumpFloorAction;
+
+    [DataField]
+    public EntityUid? FillAction;
+
+    /// <summary>
+    ///     Display-only action showing the clean water tank level via the cooldown sweep animation.
+    /// </summary>
+    [DataField]
+    public EntityUid? CleanGaugeAction;
+
+    /// <summary>
+    ///     Display-only action showing the waste tank level via the cooldown sweep animation.
+    /// </summary>
+    [DataField]
+    public EntityUid? WasteGaugeAction;
+}
+
+[Serializable, NetSerializable]
+public enum FloorScrubberBucketMode : byte
+{
+    PourIntoClean,
+    DrawFromWaste
 }

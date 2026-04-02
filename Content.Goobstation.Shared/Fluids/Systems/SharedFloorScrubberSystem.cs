@@ -2,11 +2,11 @@ using Content.Goobstation.Shared.Fluids;
 using Content.Goobstation.Maths.FixedPoint;
 using Content.Goobstation.Shared.Fluids.Components;
 using Content.Shared.Actions;
+using Content.Shared.Audio;
 using Content.Shared.Buckle;
 using Content.Shared.Buckle.Components;
 using Content.Shared.Chemistry.Components.SolutionManager;
 using Content.Shared.Chemistry.EntitySystems;
-using Content.Shared.Containers.ItemSlots;
 using Content.Shared.Decals;
 using Content.Shared.Examine;
 using Content.Shared.Fluids.Components;
@@ -24,9 +24,9 @@ namespace Content.Goobstation.Shared.Fluids.Systems;
 public abstract class SharedFloorScrubberSystem : EntitySystem
 {
     [Dependency] private readonly SharedActionsSystem _actions = default!;
+    [Dependency] protected readonly SharedAmbientSoundSystem _ambientSound = default!;
     [Dependency] protected readonly SharedDecalSystem DecalSystem = default!;
     [Dependency] protected readonly EntityLookupSystem Lookup = default!;
-    [Dependency] protected readonly ItemSlotsSystem ItemSlots = default!;
     [Dependency] protected readonly SharedMapSystem MapSystem = default!;
     [Dependency] private readonly MovementSpeedModifierSystem _movementSpeed = default!;
     [Dependency] protected readonly SharedPuddleSystem PuddleSystem = default!;
@@ -35,6 +35,13 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     [Dependency] protected readonly SharedTransformSystem Transform = default!;
 
     private static readonly EntProtoId CleanActionId = "ActionFloorScrubberToggle";
+    private static readonly EntProtoId DumpDrainActionId = "ActionFloorScrubberDumpDrain";
+    private static readonly EntProtoId DumpFloorActionId = "ActionFloorScrubberDumpFloor";
+    private static readonly EntProtoId FillActionId = "ActionFloorScrubberFill";
+    private static readonly EntProtoId CleanGaugeActionId = "ActionFloorScrubberCleanGauge";
+    private static readonly EntProtoId WasteGaugeActionId = "ActionFloorScrubberWasteGauge";
+
+    private const float GaugeUpdateInterval = 0.5f;
 
     public override void Initialize()
     {
@@ -49,12 +56,27 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
 
     private void OnStrapped(Entity<FloorScrubberComponent> ent, ref StrappedEvent args)
     {
-        _actions.AddAction(args.Buckle.Owner, ref ent.Comp.CleanAction, CleanActionId, ent);
+        var driver = args.Buckle.Owner;
+        _actions.AddAction(driver, ref ent.Comp.CleanAction, CleanActionId, ent);
+        _actions.AddAction(driver, ref ent.Comp.DumpDrainAction, DumpDrainActionId, ent);
+        _actions.AddAction(driver, ref ent.Comp.DumpFloorAction, DumpFloorActionId, ent);
+        _actions.AddAction(driver, ref ent.Comp.FillAction, FillActionId, ent);
+        _actions.AddAction(driver, ref ent.Comp.CleanGaugeAction, CleanGaugeActionId, ent);
+        _actions.AddAction(driver, ref ent.Comp.WasteGaugeAction, WasteGaugeActionId, ent);
+        Dirty(ent);
+
+        // Immediately sync gauge state for the new driver.
+        UpdateGauges(ent.Owner, ent.Comp);
     }
 
     private void OnUnstrapped(Entity<FloorScrubberComponent> ent, ref UnstrappedEvent args)
     {
         _actions.RemoveAction(args.Buckle.Owner, ent.Comp.CleanAction);
+        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.DumpDrainAction);
+        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.DumpFloorAction);
+        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.FillAction);
+        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.CleanGaugeAction);
+        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.WasteGaugeAction);
     }
 
     private void OnToggleAction(Entity<FloorScrubberComponent> ent, ref FloorScrubberToggleActionEvent args)
@@ -66,62 +88,30 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         Dirty(ent);
 
         _movementSpeed.RefreshMovementSpeedModifiers(ent);
+        _ambientSound.SetAmbience(ent.Owner, ent.Comp.CleaningEnabled);
         args.Handled = true;
     }
 
     private void OnRefreshSpeed(Entity<FloorScrubberComponent> ent, ref RefreshMovementSpeedModifiersEvent args)
     {
         if (ent.Comp.CleaningEnabled)
-        {
             args.ModifySpeed(ent.Comp.SpeedMultiplier, ent.Comp.SpeedMultiplier);
-        }
-    }
-
-    /// <summary>
-    ///     Tries to get the entity in the given item slot.
-    /// </summary>
-    private bool TryGetSlotEntity(EntityUid uid, string slotId, out EntityUid slotEntity)
-    {
-        slotEntity = default;
-
-        if (!ItemSlots.TryGetSlot(uid, slotId, out var slot))
-            return false;
-
-        if (slot.Item is not { } item)
-            return false;
-
-        slotEntity = item;
-        return true;
     }
 
     private void OnExamine(Entity<FloorScrubberComponent> ent, ref ExaminedEvent args)
     {
-        // Show clean water tank status
-        if (TryGetSlotEntity(ent, ent.Comp.TankSlotId, out var tankEntity)
-            && SolutionContainer.TryGetDrainableSolution(tankEntity, out _, out var tankSolution))
+        if (SolutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out _, out var cleanSoln))
         {
-            args.PushMarkup(Loc.GetString("floor-scrubber-examine-tank",
-                ("name", Name(tankEntity)),
-                ("amount", tankSolution.Volume),
-                ("max", tankSolution.MaxVolume)));
-        }
-        else
-        {
-            args.PushMarkup(Loc.GetString("floor-scrubber-examine-tank-empty"));
+            args.PushMarkup(Loc.GetString("floor-scrubber-examine-clean",
+                ("amount", cleanSoln.Volume),
+                ("max", cleanSoln.MaxVolume)));
         }
 
-        // Show waste tank status
-        if (TryGetSlotEntity(ent, ent.Comp.WasteSlotId, out var wasteEntity)
-            && SolutionContainer.TryGetRefillableSolution(wasteEntity, out _, out var wasteSolution))
+        if (SolutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out _, out var wasteSoln))
         {
             args.PushMarkup(Loc.GetString("floor-scrubber-examine-waste",
-                ("name", Name(wasteEntity)),
-                ("amount", wasteSolution.Volume),
-                ("max", wasteSolution.MaxVolume)));
-        }
-        else
-        {
-            args.PushMarkup(Loc.GetString("floor-scrubber-examine-waste-empty"));
+                ("amount", wasteSoln.Volume),
+                ("max", wasteSoln.MaxVolume)));
         }
     }
 
@@ -135,6 +125,17 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         var query = EntityQueryEnumerator<FloorScrubberComponent, TransformComponent>();
         while (query.MoveNext(out var uid, out var scrubber, out var xform))
         {
+            // Gauge update (throttled)
+            if (scrubber.CleanGaugeAction != null || scrubber.WasteGaugeAction != null)
+            {
+                scrubber.GaugeUpdateAccumulator += frameTime;
+                if (scrubber.GaugeUpdateAccumulator >= GaugeUpdateInterval)
+                {
+                    scrubber.GaugeUpdateAccumulator = 0f;
+                    UpdateGauges(uid, scrubber);
+                }
+            }
+
             if (!scrubber.CleaningEnabled)
                 continue;
 
@@ -143,6 +144,36 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
 
             ProcessTileCleaning((uid, scrubber, xform));
         }
+    }
+
+    /// <summary>
+    ///     Updates both tank gauge actions to reflect current fill levels.
+    ///     Cooldown remaining = fillFraction * displayPeriod, so the sweep overlay represents fill level.
+    /// </summary>
+    private void UpdateGauges(EntityUid uid, FloorScrubberComponent scrubber)
+    {
+        UpdateGauge(uid, scrubber.CleanGaugeAction, scrubber.CleanSolutionName, scrubber.GaugeDisplayPeriod);
+        UpdateGauge(uid, scrubber.WasteGaugeAction, scrubber.WasteSolutionName, scrubber.GaugeDisplayPeriod);
+    }
+
+    private void UpdateGauge(EntityUid uid, EntityUid? gaugeAction, string solutionName, float displayPeriod)
+    {
+        if (gaugeAction == null)
+            return;
+
+        if (!SolutionContainer.TryGetSolution(uid, solutionName, out _, out var soln))
+            return;
+
+        var fillFraction = soln.MaxVolume == 0
+            ? 0f
+            : (float)(soln.Volume / soln.MaxVolume);
+        var emptyFraction = 1f - fillFraction;
+
+        var now = _timing.CurTime;
+        // start offset so that remaining = fillFraction * displayPeriod
+        var start = now - TimeSpan.FromSeconds(emptyFraction * displayPeriod);
+        var end = start + TimeSpan.FromSeconds(displayPeriod);
+        _actions.SetCooldown(gaugeAction, start, end);
     }
 
     protected virtual void ProcessTileCleaning(Entity<FloorScrubberComponent, TransformComponent> ent)
@@ -163,10 +194,10 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         var tileIndices = MapSystem.LocalToTile(gridUid, grid, frontCoords);
         var tileCenter = MapSystem.GridTileToLocal(gridUid, grid, tileIndices).Position;
 
-        // 1. Vacuum Logic — suck puddles into the waste container
+        // 1. Vacuum Logic — suck puddles into the waste tank
         VacuumTile(ent, gridUid, tileCenter);
 
-        // 2. Scrubbing Logic — clean decals using water from the tank container
+        // 2. Scrubbing Logic — clean decals using water from the clean tank
         ScrubTile(ent, gridUid, tileCenter);
     }
 
@@ -174,12 +205,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     {
         var (uid, scrubber, _) = ent;
 
-        // Get the waste container entity from the item slot
-        if (!TryGetSlotEntity(uid, scrubber.WasteSlotId, out var wasteEntity))
-            return;
-
-        // Get the refillable solution on the waste container (we're filling it with waste)
-        if (!SolutionContainer.TryGetRefillableSolution(wasteEntity, out var wasteSolnEnt, out var wasteSolution))
+        if (!SolutionContainer.TryGetSolution(uid, scrubber.WasteSolutionName, out var wasteSolnEnt, out var wasteSolution))
             return;
 
         if (wasteSolution.AvailableVolume <= 0)
@@ -206,15 +232,10 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     {
         var (uid, scrubber, _) = ent;
 
-        // Get the tank container entity from the item slot
-        if (!TryGetSlotEntity(uid, scrubber.TankSlotId, out var tankEntity))
+        if (!SolutionContainer.TryGetSolution(uid, scrubber.CleanSolutionName, out var cleanSolnEnt, out var cleanSolution))
             return;
 
-        // Get the drainable solution on the tank container (we're draining clean water from it)
-        if (!SolutionContainer.TryGetDrainableSolution(tankEntity, out var tankSolnEnt, out var tankSolution))
-            return;
-
-        if (tankSolution.Volume < scrubber.CleaningAmount)
+        if (cleanSolution.Volume < scrubber.CleaningAmount)
             return;
 
         // Find cleanable decals.
@@ -228,8 +249,8 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             DecalSystem.RemoveDecal(gridUid, decalId);
         }
 
-        // Consume water from the tank container.
-        var water = SolutionContainer.SplitSolution(tankSolnEnt.Value, scrubber.CleaningAmount);
+        // Consume water from the clean tank.
+        var water = SolutionContainer.SplitSolution(cleanSolnEnt.Value, scrubber.CleaningAmount);
 
         // Spill tiny water puddle.
         var coords = new EntityCoordinates(gridUid, tileCenter);

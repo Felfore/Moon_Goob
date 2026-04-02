@@ -2,7 +2,7 @@
   parent: BaseVehicle
   id: VehicleScrubber
   name: floor scrubber
-  description: A janitorial vehicle used to clean and vacuum large areas of floor. Insert a water container and a waste container to operate.
+  description: A janitorial vehicle used to clean and vacuum large areas of floor. Drive over spills with the scrubber active, then dump the waste tank into a nearby drain.
   components:
   - type: Sprite
     sprite: Objects/Vehicles/janicart.rsi # TODO: Replace with dedicated floor scrubber sprite
@@ -12,11 +12,20 @@
     #- state: idle
     #  map: ["enum.VehicleState.Animated"]
   - type: FloorScrubber
-    tankSlotId: tank_slot
-    wasteSlotId: waste_slot
     cleaningAmount: 2
     vacuumAmount: 5
     speedMultiplier: 0.5
+  - type: SolutionContainerManager
+    solutions:
+      cleanTank:
+        maxVol: 500
+        reagents:
+        - ReagentId: Water
+          Quantity: 500
+      wasteTank:
+        maxVol: 1000
+  - type: DrainableSolution
+    solution: wasteTank
   - type: ItemSlots
     slots:
       key_slot:
@@ -30,28 +39,12 @@
           path: /Audio/Effects/Vehicle/vehiclestartup.ogg
           params:
             volume: -3
-      tank_slot:
-        name: floor-scrubber-slot-tank
-        whitelist:
-          tags:
-          - Bucket
-          components:
-          - DrainableSolution
-        insertOnInteract: true
-        priority: 5
-      waste_slot:
-        name: floor-scrubber-slot-waste
-        whitelist:
-          tags:
-          - Bucket
-          components:
-          - RefillableSolution
-        insertOnInteract: true
-        priority: 4
-  - type: ContainerContainer
-    containers:
-      tank_slot: !type:ContainerSlot {}
-      waste_slot: !type:ContainerSlot {}
+  - type: AmbientSound
+    enabled: false
+    volume: -6
+    range: 5
+    sound:
+      path: /Audio/Ambience/Objects/server_hum.ogg
   # Physics overrides for heavy industrial feel
   - type: Fixtures
     fixtures:

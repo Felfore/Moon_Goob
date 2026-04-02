@@ -1,3 +1,5 @@
+# Floor Scrubber Actions
+
 - type: entity
   parent: BaseAction
   id: ActionFloorScrubberToggle
@@ -7,4 +9,59 @@
   - type: Action
     icon: { sprite: Objects/Vehicles/janicart.rsi, state: vehicle } # TODO: Replace with floor scrubber sprite
   - type: InstantAction
+    useDelay: 1
     event: !type:FloorScrubberToggleActionEvent
+
+- type: entity
+  parent: BaseAction
+  id: ActionFloorScrubberDumpDrain
+  name: action-name-floor-scrubber-dump-drain
+  description: action-desc-floor-scrubber-dump-drain
+  components:
+  - type: Action
+    icon: { sprite: Interface/VerbIcons/eject.svg.192dpi.png }
+  - type: InstantAction
+    event: !type:FloorScrubberDumpDrainActionEvent
+
+- type: entity
+  parent: BaseAction
+  id: ActionFloorScrubberDumpFloor
+  name: action-name-floor-scrubber-dump-floor
+  description: action-desc-floor-scrubber-dump-floor
+  components:
+  - type: Action
+    icon: { sprite: Objects/Specific/Janitorial/mopbucket.rsi, state: icon }
+  - type: InstantAction
+    event: !type:FloorScrubberDumpFloorActionEvent
+
+- type: entity
+  parent: BaseAction
+  id: ActionFloorScrubberFill
+  name: action-name-floor-scrubber-fill
+  description: action-desc-floor-scrubber-fill
+  components:
+  - type: Action
+    icon: { sprite: Structures/Furniture/sink.rsi, state: sink_stem }
+  - type: InstantAction
+    event: !type:FloorScrubberFillActionEvent
+
+# Display-only gauge: clean water tank level
+# No InstantAction component — clicking does nothing. Cooldown sweep = fill level.
+- type: entity
+  parent: BaseAction
+  id: ActionFloorScrubberCleanGauge
+  name: action-name-floor-scrubber-clean-gauge
+  description: action-desc-floor-scrubber-clean-gauge
+  components:
+  - type: Action
+    icon: { sprite: Objects/Consumable/Drinks/waterBottle.rsi, state: icon }
+
+# Display-only gauge: waste tank level
+- type: entity
+  parent: BaseAction
+  id: ActionFloorScrubberWasteGauge
+  name: action-name-floor-scrubber-waste-gauge
+  description: action-desc-floor-scrubber-waste-gauge
+  components:
+  - type: Action
+    icon: { sprite: Objects/Specific/Janitorial/drain.rsi, state: icon }
