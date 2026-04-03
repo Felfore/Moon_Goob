@@ -18,8 +18,8 @@
     cleaningSoundVolume: -6
     cleaningSoundRange: 5
   - type: FootprintOwner
-    bodyDistance: 0.75
-    maxBodyVolume: 10
+    bodyDistance: 0.9
+    maxBodyVolume: 15
   - type: SolutionContainerManager
     solutions:
       cleanTank:

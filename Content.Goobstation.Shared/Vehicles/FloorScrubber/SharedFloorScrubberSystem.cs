@@ -580,7 +580,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             if (anyCleaned)
             {
                 var water = _solutionContainer.SplitSolution(cleanSolnEnt.Value, scrubber.CleaningAmount);
-                _puddle.TrySpillAt(xform.Coordinates, water, out _);
+                _puddle.TrySpillAt(xform.Coordinates, water, out _, sound: false);
                 changed = true;
             }
         }
