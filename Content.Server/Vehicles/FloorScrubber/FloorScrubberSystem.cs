@@ -33,6 +33,9 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
     [Dependency] private readonly SharedTransformSystem _transform = default!;
 
 
+    /// <summary>
+    ///     Subscribes to server-side only interactions like dumping to drains and bucket bucket interactions.
+    /// </summary>
     public override void Initialize()
     {
         base.Initialize();
@@ -44,6 +47,9 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
 
     // ── Dump to drain ──────────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     Handles the action to dump waste into a nearby drain.
+    /// </summary>
     private void OnDumpDrain(Entity<FloorScrubberComponent> ent, ref FloorScrubberDumpDrainActionEvent args)
     {
         if (args.Handled)
@@ -60,7 +66,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         }
 
         // Pre-check 2: a drain must be nearby before we start the timer.
-        if (!TryGetNearestDrain(ent.Owner, out _, ent.Comp))
+        if (!TryGetNearestDrain(ent.Owner, out _, ent.Owner))
         {
             _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-drain-no-drain"), ent.Owner, user);
             return;
@@ -79,6 +85,9 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         args.Handled = true;
     }
 
+    /// <summary>
+    ///     Executes the actual drain dumping after the DoAfter delay.
+    /// </summary>
     private void OnDumpDrainDoAfter(Entity<FloorScrubberComponent> ent, ref FloorScrubberDumpDrainDoAfterEvent args)
     {
         if (args.Cancelled || args.Handled)
@@ -87,7 +96,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         var user = args.User;
 
         // Re-validate drain still exists (entity may have moved or drain removed).
-        if (!TryGetNearestDrain(ent.Owner, out var drain, ent.Comp))
+        if (!TryGetNearestDrain(ent.Owner, out var drain, ent.Owner))
         {
             _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-drain-no-drain"), ent.Owner, user);
             return;
@@ -128,9 +137,12 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         }
 
         args.Handled = true;
-        UpdateAlerts(ent);
+        UpdateAlerts(ent.Owner);
     }
 
+    /// <summary>
+    ///     Handles interactions from containers (buckets, beakers) to refill or drain the tanks.
+    /// </summary>
     private void OnBucketInteract(Entity<FloorScrubberComponent> ent, ref AfterInteractUsingEvent args)
     {
         if (args.Handled || !args.CanReach)
@@ -225,15 +237,18 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         }
 
         args.Handled = true;
-        UpdateAlerts(ent);
+        UpdateAlerts(ent.Owner);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private bool TryGetNearestDrain(EntityUid uid, out Entity<DrainComponent> drain, FloorScrubberComponent? scrubber = null)
+    /// <summary>
+    ///     Attempts to find the nearest utility drain (not a sink) for waste dumping.
+    /// </summary>
+    private bool TryGetNearestDrain(EntityUid uid, out Entity<DrainComponent> drain, Entity<FloorScrubberComponent?> scrubber)
     {
         drain = default;
-        if (!Resolve(uid, ref scrubber))
+        if (!Resolve(scrubber, ref scrubber.Comp))
             return false;
 
         var scrubberPos = _transform.GetMapCoordinates(uid);

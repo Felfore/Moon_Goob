@@ -11,6 +11,7 @@ namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
 ///     Uses two large internal solution tanks: one for clean water, one for waste.
 /// </summary>
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState]
+[Access(typeof(SharedFloorScrubberSystem))]
 public sealed partial class FloorScrubberComponent : Component
 {
     /// <summary>
@@ -99,23 +100,29 @@ public sealed partial class FloorScrubberComponent : Component
     [DataField]
     public float CleaningAccumulator;
 
-    /// <summary>
-    ///     Accumulator for throttling gauge updates (~0.5s intervals).
-    /// </summary>
-    [DataField]
-    public float GaugeUpdateAccumulator;
-
     // --- Action refs ---
 
+    /// <summary>
+    ///     Action for toggling the scrubber state.
+    /// </summary>
     [DataField]
     public EntityUid? CleanAction;
 
+    /// <summary>
+    ///     Action for dumping the waste tank into a drain.
+    /// </summary>
     [DataField]
     public EntityUid? DumpDrainAction;
 
+    /// <summary>
+    ///     Action for dumping the waste tank onto the floor.
+    /// </summary>
     [DataField]
     public EntityUid? DumpFloorAction;
 
+    /// <summary>
+    ///     Action for refilling the clean water tank.
+    /// </summary>
     [DataField]
     public EntityUid? FillAction;
 }

@@ -48,8 +48,6 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     [Dependency] private readonly SharedTransformSystem _transform = default!;
     [Dependency] private readonly AlertsSystem _alerts = default!;
 
-    private const float GaugeUpdateInterval = 1f;
-
     public override void Initialize()
     {
         base.Initialize();
@@ -65,6 +63,9 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         SubscribeLocalEvent<FloorScrubberComponent, ComponentShutdown>(OnShutdown);
     }
 
+    /// <summary>
+    ///     Handles a driver buckling into the scrubber, granting actions and showing alerts.
+    /// </summary>
     private void OnStrapped(Entity<FloorScrubberComponent> ent, ref StrappedEvent args)
     {
         var driver = args.Buckle.Owner;
@@ -72,13 +73,16 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         _actions.AddAction(driver, ref ent.Comp.DumpDrainAction, "ActionFloorScrubberDumpDrain", ent);
         _actions.AddAction(driver, ref ent.Comp.DumpFloorAction, "ActionFloorScrubberDumpFloor", ent);
         _actions.AddAction(driver, ref ent.Comp.FillAction, "ActionFloorScrubberFill", ent);
-        
+
         Dirty(ent);
 
         // Immediately show alerts for the new driver.
-        UpdateAlerts(ent);
+        UpdateAlerts(ent.Owner);
     }
 
+    /// <summary>
+    ///     Handles a driver unbuckling, removing actions and clearing alerts.
+    /// </summary>
     private void OnUnstrapped(Entity<FloorScrubberComponent> ent, ref UnstrappedEvent args)
     {
         var driver = args.Buckle.Owner;
@@ -86,14 +90,17 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         _actions.RemoveAction(driver, ent.Comp.DumpDrainAction);
         _actions.RemoveAction(driver, ent.Comp.DumpFloorAction);
         _actions.RemoveAction(driver, ent.Comp.FillAction);
-        
+
         _alerts.ClearAlert(driver, "FloorScrubberClean");
         _alerts.ClearAlert(driver, "FloorScrubberWaste");
 
         if (ent.Comp.CleaningEnabled)
-            SetCleaningEnabled(ent, false);
+            SetCleaningEnabled(ent.Owner, false);
     }
 
+    /// <summary>
+    ///     Ensures clean-up of audio and alerts on component shutdown.
+    /// </summary>
     private void OnShutdown(Entity<FloorScrubberComponent> ent, ref ComponentShutdown args)
     {
         UpdateCleaningAudio(ent, false);
@@ -108,19 +115,30 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
     }
 
-    public void SetCleaningEnabled(Entity<FloorScrubberComponent> ent, bool enabled)
+    /// <summary>
+    ///     Toggles the cleaning state and associated effects (audio, speed).
+    /// </summary>
+    public void SetCleaningEnabled(Entity<FloorScrubberComponent?> ent, bool enabled)
     {
-        ent.Comp.CleaningEnabled = enabled;
-        UpdateCleaningAudio(ent, enabled);
+        if (!Resolve(ent, ref ent.Comp))
+            return;
 
-        // Water Trail Logic: Use the NoFootprintsComponent to stop trails when cleaning is OFF.
-        // Wait! User said they want trails ALWAYS, but clean trails when ON and dirty when OFF.
-        // So we DON'T toggle NoFootprints anymore, but let's keep the option open for the sync logic.
-        
-        _movementSpeed.RefreshMovementSpeedModifiers(ent);
+        if (ent.Comp.CleaningEnabled == enabled)
+            return;
+
+        ent.Comp.CleaningEnabled = enabled;
+        UpdateCleaningAudio((ent.Owner, ent.Comp), enabled);
+
+        _movementSpeed.RefreshMovementSpeedModifiers(ent.Owner);
         Dirty(ent);
+
+        // Update alerts to show/reset severity if we stopped due to a full tank etc.
+        UpdateAlerts(ent.Owner);
     }
 
+    /// <summary>
+    ///     Starts or stops the looping cleaning audio stream.
+    /// </summary>
     private void UpdateCleaningAudio(Entity<FloorScrubberComponent> ent, bool enabled)
     {
         if (enabled)
@@ -146,6 +164,9 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     }
 
 
+    /// <summary>
+    ///     Synchronizes cleaning audio state when a key is inserted.
+    /// </summary>
     private void OnInsert(Entity<FloorScrubberComponent> ent, ref EntInsertedIntoContainerMessage args)
     {
         // Only care about the key slot
@@ -156,6 +177,9 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         UpdateCleaningAudio(ent, ent.Comp.CleaningEnabled);
     }
 
+    /// <summary>
+    ///     Toggles the cleaning mode via action.
+    /// </summary>
     private void OnToggleAction(Entity<FloorScrubberComponent> ent, ref FloorScrubberToggleActionEvent args)
     {
         if (args.Handled)
@@ -169,10 +193,13 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             return;
         }
 
-        SetCleaningEnabled(ent, !ent.Comp.CleaningEnabled);
+        SetCleaningEnabled(ent.Owner, !ent.Comp.CleaningEnabled);
         args.Handled = true;
     }
 
+    /// <summary>
+    ///     Dumps the waste solution onto the floor.
+    /// </summary>
     private void OnDumpFloor(Entity<FloorScrubberComponent> ent, ref FloorScrubberDumpFloorActionEvent args)
     {
         if (args.Handled)
@@ -198,9 +225,12 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
 
         args.Handled = true;
-        UpdateAlerts(ent);
+        UpdateAlerts(ent.Owner);
     }
 
+    /// <summary>
+    ///     Refills the clean water tank from a nearby source.
+    /// </summary>
     private void OnFill(Entity<FloorScrubberComponent> ent, ref FloorScrubberFillActionEvent args)
     {
         if (args.Handled)
@@ -271,15 +301,21 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
 
         args.Handled = true;
-        UpdateAlerts(ent);
+        UpdateAlerts(ent.Owner);
     }
 
+    /// <summary>
+    ///     Modifies movement speed based on whether the scrubber is cleaning.
+    /// </summary>
     private void OnRefreshSpeed(Entity<FloorScrubberComponent> ent, ref RefreshMovementSpeedModifiersEvent args)
     {
         if (ent.Comp.CleaningEnabled)
             args.ModifySpeed(ent.Comp.SpeedMultiplier, ent.Comp.SpeedMultiplier);
     }
 
+    /// <summary>
+    ///     Adds information about tank levels to the examine tooltip.
+    /// </summary>
     private void OnExamine(Entity<FloorScrubberComponent> ent, ref ExaminedEvent args)
     {
         if (_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out _, out var cleanSoln))
@@ -297,6 +333,9 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
     }
 
+    /// <summary>
+    ///     Updates active scrubbers. Logic is throttled and only cleans when enabled.
+    /// </summary>
     public override void Update(float frameTime)
     {
         base.Update(frameTime);
@@ -307,28 +346,15 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         var query = EntityQueryEnumerator<FloorScrubberComponent, TransformComponent>();
         while (query.MoveNext(out var uid, out var scrubber, out var xform))
         {
-            UpdateCleaningAudio((uid, scrubber), scrubber.CleaningEnabled);
-
             if (!scrubber.CleaningEnabled)
                 continue;
 
             // Key Check: Automatically stop cleaning if the key is removed.
             if (!_itemSlots.TryGetSlot(uid, "key_slot", out var slot) || !slot.HasItem)
             {
-                SetCleaningEnabled((uid, scrubber), false);
+                SetCleaningEnabled(uid, false);
                 continue;
             }
-
-            // HUD Alert Update (throttled)
-            scrubber.GaugeUpdateAccumulator += frameTime;
-            if (scrubber.GaugeUpdateAccumulator >= GaugeUpdateInterval)
-            {
-                scrubber.GaugeUpdateAccumulator = 0f;
-                UpdateAlerts((uid, scrubber));
-            }
-
-            if (!scrubber.CleaningEnabled)
-                continue;
 
             if (xform.GridUid == null)
                 continue;
@@ -343,8 +369,14 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
     }
 
-    protected void UpdateAlerts(Entity<FloorScrubberComponent> ent)
+    /// <summary>
+    ///     Updates the HUD status alerts for buckled occupants.
+    /// </summary>
+    protected void UpdateAlerts(Entity<FloorScrubberComponent?> ent)
     {
+        if (!Resolve(ent, ref ent.Comp))
+            return;
+
         if (!TryComp<StrapComponent>(ent, out var strap) || strap.BuckledEntities.Count == 0)
             return;
 
@@ -364,6 +396,9 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
     }
 
+    /// <summary>
+    ///     Performs the actual tile cleaning logic (decals and puddles).
+    /// </summary>
     protected virtual void ProcessTileCleaning(Entity<FloorScrubberComponent?, TransformComponent?> ent)
     {
         if (!Resolve(ent, ref ent.Comp1, ref ent.Comp2))
@@ -382,7 +417,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         if (!_solutionContainer.TryGetSolution(ent.Owner, scrubber.WasteSolutionName, out var wasteSolnEnt, out var wasteSolution) ||
             wasteSolution.AvailableVolume <= 0)
         {
-            SetCleaningEnabled((ent.Owner, scrubber), false);
+            SetCleaningEnabled(ent.Owner, false);
             _popup.PopupEntity(Loc.GetString("floor-scrubber-waste-full"), ent.Owner);
             return;
         }
@@ -445,6 +480,8 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
 
         _solutionContainer.TryGetSolution(ent.Owner, scrubber.CleanSolutionName, out var cleanSolnEnt, out var cleanSolution);
 
+        var changed = false;
+
         // --- Vacuum Logic ---
         if (wasteSolution.AvailableVolume > 0)
         {
@@ -483,6 +520,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
                 if (isFootprint)
                 {
                     RaiseLocalEvent(entity, new FootprintCleanEvent());
+                    changed = true;
                 }
 
                 // 2. Vacuum Puddle solutions
@@ -494,6 +532,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
                     {
                         var removed = _solutionContainer.SplitSolution(puddleSolnEnt.Value, drawAmount);
                         _solutionContainer.TryAddSolution(wasteSolnEnt.Value, removed);
+                        changed = true;
                     }
                 }
             }
@@ -509,7 +548,6 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             {
                 // We keep a consistent small amount (e.g., 2u) in the print tank to draw from.
                 var targetAmount = FixedPoint2.New(2);
-                var currentAmount = _solutionContainer.GetTotalPrototypeQuantity(printSolnEnt.Value, "puddle"); // Dummy check or just volume.
                 
                 if (printSolnEnt.Value.Comp.Solution.Volume < targetAmount)
                 {
@@ -518,6 +556,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
                     {
                         var move = _solutionContainer.SplitSolution(cleanSolnEnt.Value, amount);
                         _solutionContainer.TryAddSolution(printSolnEnt.Value, move);
+                        changed = true;
                     }
                 }
             }
@@ -542,7 +581,11 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             {
                 var water = _solutionContainer.SplitSolution(cleanSolnEnt.Value, scrubber.CleaningAmount);
                 _puddle.TrySpillAt(xform.Coordinates, water, out _);
+                changed = true;
             }
         }
+
+        if (changed)
+            UpdateAlerts(ent.Owner);
     }
 }
