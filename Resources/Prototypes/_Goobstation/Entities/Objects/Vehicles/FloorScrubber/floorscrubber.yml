@@ -1,0 +1,80 @@
+- type: entity
+  parent: BaseVehicle
+  id: VehicleScrubber
+  name: floor scrubber
+  description: A janitorial vehicle used to clean and vacuum large areas of floor. Drive over spills with the scrubber active, then dump the waste tank into a nearby drain.
+  components:
+  - type: Sprite
+    sprite: Objects/Vehicles/janicart.rsi # TODO: Replace with dedicated floor scrubber sprite
+    state: vehicle
+    noRot: true
+  - type: FloorScrubber
+    cleaningAmount: 2
+    vacuumAmount: 5
+    speedMultiplier: 0.5
+    extraCleaningRange: 1
+    cleaningShape: Cross
+    cleaningSound: /Audio/Ambience/Objects/server_fans.ogg
+    cleaningSoundVolume: -6
+    cleaningSoundRange: 5
+  - type: FootprintOwner
+    bodyDistance: 0.9
+    maxBodyVolume: 15
+  - type: SolutionContainerManager
+    solutions:
+      cleanTank:
+        maxVol: 500
+        reagents:
+        - ReagentId: Water
+          Quantity: 500
+      wasteTank:
+        maxVol: 1000
+      print:
+        maxVol: 10
+  - type: DrainableSolution
+    solution: wasteTank
+  - type: ItemSlots
+    slots:
+      key_slot:
+        name: vehicle-slot-component-slot-name-keys
+        whitelist:
+          requireAll: true
+          tags:
+          - VehicleKey
+          - FloorScrubberKeys
+        insertSound:
+          path: /Audio/Effects/Vehicle/vehiclestartup.ogg
+          params:
+            volume: -3
+  # Physics overrides for heavy industrial feel
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeCircle
+          radius: 0.45
+        density: 350
+        mask:
+          - MobMask
+        layer:
+          - MobLayer
+        hard: true
+  - type: MovementSpeedModifier
+    baseAcceleration: 5
+    baseFriction: 2.0
+    baseWalkSpeed: 2.5
+    baseSprintSpeed: 4
+
+- type: entity
+  parent: BaseKey
+  id: VehicleKeyFloorScrubber
+  name: floor scrubber keys
+  description: The keys to a cleaner future.
+  components:
+  - type: Sprite
+    sprite: Objects/Vehicles/janicart.rsi
+    state: keys
+  - type: Tag
+    tags:
+    - VehicleKey
+    - FloorScrubberKeys
