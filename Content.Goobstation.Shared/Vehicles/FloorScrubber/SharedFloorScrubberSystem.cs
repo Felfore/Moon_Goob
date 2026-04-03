@@ -13,6 +13,7 @@ using Content.Shared.Movement.Systems;
 using Content.Shared.Popups;
 using Content.Shared.Fluids;
 using Content.Shared.Fluids.Components;
+using Content.Shared.Alert;
 using Content.Goobstation.Common.Footprints;
 using Robust.Shared.Audio;
 using Robust.Shared.Audio.Systems;
@@ -35,6 +36,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     [Dependency] private readonly SharedActionsSystem _actions = default!;
     [Dependency] private readonly SharedAmbientSoundSystem _ambientSound = default!;
     [Dependency] private readonly SharedDecalSystem _decal = default!;
+    [Dependency] private readonly ItemSlotsSystem _itemSlots = default!;
     [Dependency] private readonly EntityLookupSystem _lookup = default!;
     [Dependency] private readonly SharedMapSystem _map = default!;
     [Dependency] private readonly MovementSpeedModifierSystem _movementSpeed = default!;
@@ -44,15 +46,9 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     [Dependency] private readonly SharedAudioSystem _audio = default!;
     [Dependency] private readonly SharedPopupSystem _popup = default!;
     [Dependency] private readonly SharedTransformSystem _transform = default!;
+    [Dependency] private readonly AlertsSystem _alerts = default!;
 
-    private static readonly EntProtoId CleanActionId = "ActionFloorScrubberToggle";
-    private static readonly EntProtoId DumpDrainActionId = "ActionFloorScrubberDumpDrain";
-    private static readonly EntProtoId DumpFloorActionId = "ActionFloorScrubberDumpFloor";
-    private static readonly EntProtoId FillActionId = "ActionFloorScrubberFill";
-    private static readonly EntProtoId CleanGaugeActionId = "ActionFloorScrubberCleanGauge";
-    private static readonly EntProtoId WasteGaugeActionId = "ActionFloorScrubberWasteGauge";
-
-    private const float GaugeUpdateInterval = 0.5f;
+    private const float GaugeUpdateInterval = 1f;
 
     public override void Initialize()
     {
@@ -72,26 +68,27 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     private void OnStrapped(Entity<FloorScrubberComponent> ent, ref StrappedEvent args)
     {
         var driver = args.Buckle.Owner;
-        _actions.AddAction(driver, ref ent.Comp.CleanAction, CleanActionId, ent);
-        _actions.AddAction(driver, ref ent.Comp.DumpDrainAction, DumpDrainActionId, ent);
-        _actions.AddAction(driver, ref ent.Comp.DumpFloorAction, DumpFloorActionId, ent);
-        _actions.AddAction(driver, ref ent.Comp.FillAction, FillActionId, ent);
-        _actions.AddAction(driver, ref ent.Comp.CleanGaugeAction, CleanGaugeActionId, ent);
-        _actions.AddAction(driver, ref ent.Comp.WasteGaugeAction, WasteGaugeActionId, ent);
+        _actions.AddAction(driver, ref ent.Comp.CleanAction, "ActionFloorScrubberToggle", ent);
+        _actions.AddAction(driver, ref ent.Comp.DumpDrainAction, "ActionFloorScrubberDumpDrain", ent);
+        _actions.AddAction(driver, ref ent.Comp.DumpFloorAction, "ActionFloorScrubberDumpFloor", ent);
+        _actions.AddAction(driver, ref ent.Comp.FillAction, "ActionFloorScrubberFill", ent);
+        
         Dirty(ent);
 
-        // Immediately sync gauge state for the new driver.
-        UpdateGauges(ent, ent.Comp);
+        // Immediately show alerts for the new driver.
+        UpdateAlerts(ent);
     }
 
     private void OnUnstrapped(Entity<FloorScrubberComponent> ent, ref UnstrappedEvent args)
     {
-        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.CleanAction);
-        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.DumpDrainAction);
-        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.DumpFloorAction);
-        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.FillAction);
-        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.CleanGaugeAction);
-        _actions.RemoveAction(args.Buckle.Owner, ent.Comp.WasteGaugeAction);
+        var driver = args.Buckle.Owner;
+        _actions.RemoveAction(driver, ent.Comp.CleanAction);
+        _actions.RemoveAction(driver, ent.Comp.DumpDrainAction);
+        _actions.RemoveAction(driver, ent.Comp.DumpFloorAction);
+        _actions.RemoveAction(driver, ent.Comp.FillAction);
+        
+        _alerts.ClearAlert(driver, "FloorScrubberClean");
+        _alerts.ClearAlert(driver, "FloorScrubberWaste");
 
         if (ent.Comp.CleaningEnabled)
             SetCleaningEnabled(ent, false);
@@ -100,6 +97,15 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
     private void OnShutdown(Entity<FloorScrubberComponent> ent, ref ComponentShutdown args)
     {
         UpdateCleaningAudio(ent, false);
+
+        if (TryComp<StrapComponent>(ent, out var strap))
+        {
+            foreach (var occupant in strap.BuckledEntities)
+            {
+                _alerts.ClearAlert(occupant, "FloorScrubberClean");
+                _alerts.ClearAlert(occupant, "FloorScrubberWaste");
+            }
+        }
     }
 
     public void SetCleaningEnabled(Entity<FloorScrubberComponent> ent, bool enabled)
@@ -155,6 +161,14 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         if (args.Handled)
             return;
 
+        // Key Check: Cannot toggle if the key slot is empty.
+        if (!_itemSlots.TryGetSlot(ent.Owner, "key_slot", out var slot) || !slot.HasItem)
+        {
+            if (_timing.IsFirstTimePredicted)
+                _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-no-key"), ent.Owner, args.Performer);
+            return;
+        }
+
         SetCleaningEnabled(ent, !ent.Comp.CleaningEnabled);
         args.Handled = true;
     }
@@ -184,6 +198,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
 
         args.Handled = true;
+        UpdateAlerts(ent);
     }
 
     private void OnFill(Entity<FloorScrubberComponent> ent, ref FloorScrubberFillActionEvent args)
@@ -256,6 +271,7 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
 
         args.Handled = true;
+        UpdateAlerts(ent);
     }
 
     private void OnRefreshSpeed(Entity<FloorScrubberComponent> ent, ref RefreshMovementSpeedModifiersEvent args)
@@ -296,15 +312,19 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
             if (!scrubber.CleaningEnabled)
                 continue;
 
-            // Gauge update (throttled)
-            if (scrubber.CleanGaugeAction != null || scrubber.WasteGaugeAction != null)
+            // Key Check: Automatically stop cleaning if the key is removed.
+            if (!_itemSlots.TryGetSlot(uid, "key_slot", out var slot) || !slot.HasItem)
             {
-                scrubber.GaugeUpdateAccumulator += frameTime;
-                if (scrubber.GaugeUpdateAccumulator >= GaugeUpdateInterval)
-                {
-                    scrubber.GaugeUpdateAccumulator = 0f;
-                    UpdateGauges(uid, scrubber);
-                }
+                SetCleaningEnabled((uid, scrubber), false);
+                continue;
+            }
+
+            // HUD Alert Update (throttled)
+            scrubber.GaugeUpdateAccumulator += frameTime;
+            if (scrubber.GaugeUpdateAccumulator >= GaugeUpdateInterval)
+            {
+                scrubber.GaugeUpdateAccumulator = 0f;
+                UpdateAlerts((uid, scrubber));
             }
 
             if (!scrubber.CleaningEnabled)
@@ -323,37 +343,25 @@ public abstract class SharedFloorScrubberSystem : EntitySystem
         }
     }
 
-    /// <summary>
-    ///     Updates both tank gauge actions to reflect current fill levels.
-    ///     Cooldown remaining = fillFraction * displayPeriod, so the sweep overlay represents fill level.
-    /// </summary>
-    private void UpdateGauges(EntityUid uid, FloorScrubberComponent? scrubber = null)
+    protected void UpdateAlerts(Entity<FloorScrubberComponent> ent)
     {
-        if (!Resolve(uid, ref scrubber))
+        if (!TryComp<StrapComponent>(ent, out var strap) || strap.BuckledEntities.Count == 0)
             return;
 
-        UpdateGauge(uid, scrubber.CleanGaugeAction, scrubber.CleanSolutionName, scrubber.GaugeDisplayPeriod);
-        UpdateGauge(uid, scrubber.WasteGaugeAction, scrubber.WasteSolutionName, scrubber.GaugeDisplayPeriod);
-    }
-
-    private void UpdateGauge(EntityUid uid, EntityUid? gaugeAction, string solutionName, float displayPeriod)
-    {
-        if (gaugeAction == null)
+        if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out _, out var cleanSoln) ||
+            !_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out _, out var wasteSoln))
+        {
             return;
+        }
 
-        if (!_solutionContainer.TryGetSolution(uid, solutionName, out _, out var soln))
-            return;
+        var cleanSeverity = (short) Math.Clamp((float) (cleanSoln.Volume / cleanSoln.MaxVolume) * 10, 0, 10);
+        var wasteSeverity = (short) Math.Clamp((float) (wasteSoln.Volume / wasteSoln.MaxVolume) * 10, 0, 10);
 
-        var fillFraction = soln.MaxVolume == 0
-            ? 0f
-            : (float)(soln.Volume / soln.MaxVolume);
-        var emptyFraction = 1f - fillFraction;
-
-        var now = _timing.CurTime;
-        // start offset so that remaining = fillFraction * displayPeriod
-        var start = now - TimeSpan.FromSeconds(emptyFraction * displayPeriod);
-        var end = start + TimeSpan.FromSeconds(displayPeriod);
-        _actions.SetCooldown(gaugeAction, start, end);
+        foreach (var occupant in strap.BuckledEntities)
+        {
+            _alerts.ShowAlert(occupant, "FloorScrubberClean", cleanSeverity);
+            _alerts.ShowAlert(occupant, "FloorScrubberWaste", wasteSeverity);
+        }
     }
 
     protected virtual void ProcessTileCleaning(Entity<FloorScrubberComponent?, TransformComponent?> ent)

@@ -50,24 +50,3 @@
     predicted: true
   - type: InstantAction
     event: !type:FloorScrubberFillActionEvent
-
-# Display-only gauge: clean water tank level
-# No InstantAction component — clicking does nothing. Cooldown sweep = fill level.
-- type: entity
-  parent: BaseAction
-  id: ActionFloorScrubberCleanGauge
-  name: action-name-floor-scrubber-clean-gauge
-  description: action-desc-floor-scrubber-clean-gauge
-  components:
-  - type: Action
-    icon: { sprite: Objects/Consumable/Drinks/waterBottle.rsi, state: icon }
-
-# Display-only gauge: waste tank level
-- type: entity
-  parent: BaseAction
-  id: ActionFloorScrubberWasteGauge
-  name: action-name-floor-scrubber-waste-gauge
-  description: action-desc-floor-scrubber-waste-gauge
-  components:
-  - type: Action
-    icon: { sprite: Objects/Specific/Janitorial/drain.rsi, state: icon }

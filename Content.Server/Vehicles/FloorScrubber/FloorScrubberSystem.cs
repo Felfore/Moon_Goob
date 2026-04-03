@@ -39,7 +39,6 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
 
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpDrainActionEvent>(OnDumpDrain);
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpDrainDoAfterEvent>(OnDumpDrainDoAfter);
-        SubscribeLocalEvent<FloorScrubberComponent, GetVerbsEvent<AlternativeVerb>>(OnGetBucketVerb);
         SubscribeLocalEvent<FloorScrubberComponent, AfterInteractUsingEvent>(OnBucketInteract);
     }
 
@@ -129,39 +128,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         }
 
         args.Handled = true;
-    }
-
-    // ── Bucket verb + interaction ──────────────────────────────────────────────
-
-    private void OnGetBucketVerb(Entity<FloorScrubberComponent> ent, ref GetVerbsEvent<AlternativeVerb> args)
-    {
-        if (!args.CanAccess || !args.CanInteract)
-            return;
-
-        var comp = ent.Comp;
-        var user = args.User;
-        var scrubber = ent.Owner;
-
-        var verb = new AlternativeVerb
-        {
-            Text = comp.BucketMode == FloorScrubberBucketMode.PourIntoClean
-                ? Loc.GetString("floor-scrubber-verb-bucket-mode-to-waste")
-                : Loc.GetString("floor-scrubber-verb-bucket-mode-to-clean"),
-            Act = () =>
-            {
-                comp.BucketMode = comp.BucketMode == FloorScrubberBucketMode.PourIntoClean
-                    ? FloorScrubberBucketMode.DrawFromWaste
-                    : FloorScrubberBucketMode.PourIntoClean;
-                Dirty(scrubber, comp);
-
-                var msg = comp.BucketMode == FloorScrubberBucketMode.PourIntoClean
-                    ? Loc.GetString("floor-scrubber-bucket-mode-clean")
-                    : Loc.GetString("floor-scrubber-bucket-mode-waste");
-                _popup.PopupEntity(msg, scrubber, user);
-            },
-            Priority = 1
-        };
-        args.Verbs.Add(verb);
+        UpdateAlerts(ent);
     }
 
     private void OnBucketInteract(Entity<FloorScrubberComponent> ent, ref AfterInteractUsingEvent args)
@@ -177,26 +144,63 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
 
         var user = args.User;
 
-        if (ent.Comp.BucketMode == FloorScrubberBucketMode.PourIntoClean)
+        if (bucketSoln.Volume > 0)
         {
-            // Pour bucket contents into clean tank.
-            if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out var cleanSolnEnt, out var cleanSoln))
-                return;
+            // --- Refill / Dump Mode ---
 
-            var toTransfer = FixedPoint2.Min(bucketSoln.Volume, cleanSoln.AvailableVolume);
-            if (toTransfer <= 0)
+            // Edge Case: Check if it's "Pure Water" (nothing but Water).
+            // This ensures the clean tank never gets contaminated.
+            var isPureWater = true;
+            foreach (var reagent in bucketSoln.Contents)
             {
-                _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-full"), ent.Owner, user);
-                return;
+                if (reagent.Reagent.Prototype != "Water")
+                {
+                    isPureWater = false;
+                    break;
+                }
             }
 
-            var poured = _solutionContainer.SplitSolution(bucketSolnEnt.Value, toTransfer);
-            _solutionContainer.TryAddSolution(cleanSolnEnt.Value, poured);
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-poured",
-                ("amount", toTransfer)), ent.Owner, user);
+            if (isPureWater)
+            {
+                // Refill Clean Tank
+                if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out var cleanSolnEnt, out var cleanSoln))
+                    return;
+
+                var toTransfer = FixedPoint2.Min(bucketSoln.Volume, cleanSoln.AvailableVolume);
+                if (toTransfer <= 0)
+                {
+                    _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-full"), ent.Owner, user);
+                }
+                else
+                {
+                    var poured = _solutionContainer.SplitSolution(bucketSolnEnt.Value, toTransfer);
+                    _solutionContainer.TryAddSolution(cleanSolnEnt.Value, poured);
+                    _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-poured", ("amount", toTransfer)), ent.Owner, user);
+                }
+            }
+            else
+            {
+                // Dump into Waste Tank
+                if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out var wasteSolnEnt, out var wasteSoln))
+                    return;
+
+                var toTransfer = FixedPoint2.Min(bucketSoln.Volume, wasteSoln.AvailableVolume);
+                if (toTransfer <= 0)
+                {
+                    _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-waste-full"), ent.Owner, user);
+                }
+                else
+                {
+                    var poured = _solutionContainer.SplitSolution(bucketSolnEnt.Value, toTransfer);
+                    _solutionContainer.TryAddSolution(wasteSolnEnt.Value, poured);
+                    _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-poured-waste", ("amount", toTransfer)), ent.Owner, user);
+                }
+            }
         }
         else
         {
+            // --- Draw Mode (Empty container) ---
+
             // Draw waste into bucket.
             if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out var wasteSolnEnt, out var wasteSoln))
                 return;
@@ -208,17 +212,20 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
             var toTransfer = FixedPoint2.Min(wasteSoln.Volume, bucketRefill.AvailableVolume);
             if (toTransfer <= 0)
             {
-                _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-drain-empty"), ent.Owner, user);
+                if (wasteSoln.Volume <= 0)
+                    _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-drain-empty"), ent.Owner, user);
+                else
+                    _popup.PopupEntity(Loc.GetString("bucket-full"), used, user);
                 return;
             }
 
             var drawn = _solutionContainer.SplitSolution(wasteSolnEnt.Value, toTransfer);
             _solutionContainer.TryAddSolution(bucketRefillEnt.Value, drawn);
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-drawn",
-                ("amount", toTransfer)), ent.Owner, user);
+            _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-drawn", ("amount", toTransfer)), ent.Owner, user);
         }
 
         args.Handled = true;
+        UpdateAlerts(ent);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

@@ -14,12 +14,14 @@ action-desc-floor-scrubber-dump-floor = Pour the waste tank contents onto the fl
 
 action-name-floor-scrubber-fill = Fill Clean Tank
 action-desc-floor-scrubber-fill = Fill the clean water tank from a nearby sink or water source.
+floor-scrubber-fill-no-key = You need a key to turn on the cleaning system!
 
-action-name-floor-scrubber-clean-gauge = Clean Water
-action-desc-floor-scrubber-clean-gauge = The current clean water level. The overlay indicates how full the tank is.
+# HUD Alerts
+alerts-floor-scrubber-clean-name = Clean Water Level
+alerts-floor-scrubber-clean-desc = Remaining clean water for scrubbing.
 
-action-name-floor-scrubber-waste-gauge = Waste Level
-action-desc-floor-scrubber-waste-gauge = The current waste level. The overlay indicates how full the waste tank is.
+alerts-floor-scrubber-waste-name = Waste Level
+alerts-floor-scrubber-waste-desc = Collected waste fluids in the tank. Empty using a bucket!
 
 # Dump to drain messages
 floor-scrubber-dump-drain-empty = The waste tank is empty.
@@ -37,12 +39,10 @@ floor-scrubber-fill-no-source = No water source nearby.
 floor-scrubber-fill-success = Clean tank filled from {$source}.
 
 # Bucket interaction messages
-floor-scrubber-bucket-mode-clean = Bucket mode: pouring into clean tank.
-floor-scrubber-bucket-mode-waste = Bucket mode: drawing from waste tank.
-floor-scrubber-verb-bucket-mode-to-waste = Switch to Draw Waste
-floor-scrubber-verb-bucket-mode-to-clean = Switch to Pour Clean Water
 floor-scrubber-bucket-poured = Poured {$amount}u into the clean tank.
+floor-scrubber-bucket-poured-waste = Dumped {$amount}u into the waste tank.
 floor-scrubber-bucket-drawn = Drew {$amount}u of waste into the container.
+floor-scrubber-dump-waste-full = The waste tank is full.
 
 # Full tank notification
 floor-scrubber-waste-full = Waste tank full! Stopping scrubber...

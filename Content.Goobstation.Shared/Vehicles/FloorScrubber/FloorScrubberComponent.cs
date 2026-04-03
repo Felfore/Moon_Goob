@@ -32,13 +32,6 @@ public sealed partial class FloorScrubberComponent : Component
     public string WasteSolutionName = "wasteTank";
 
     /// <summary>
-    ///     Controls whether using a bucket on the scrubber pours into the clean tank
-    ///     or draws from the waste tank.
-    /// </summary>
-    [DataField, AutoNetworkedField]
-    public FloorScrubberBucketMode BucketMode = FloorScrubberBucketMode.PourIntoClean;
-
-    /// <summary>
     ///     Amount of water used per decal cleaned.
     /// </summary>
     [DataField]
@@ -107,13 +100,6 @@ public sealed partial class FloorScrubberComponent : Component
     public float CleaningAccumulator;
 
     /// <summary>
-    ///     The display period in seconds used for the tank gauge cooldown animation.
-    ///     Remaining cooldown = fillFraction * GaugeDisplayPeriod → overlay = fill level.
-    /// </summary>
-    [DataField]
-    public float GaugeDisplayPeriod = 100f;
-
-    /// <summary>
     ///     Accumulator for throttling gauge updates (~0.5s intervals).
     /// </summary>
     [DataField]
@@ -132,25 +118,6 @@ public sealed partial class FloorScrubberComponent : Component
 
     [DataField]
     public EntityUid? FillAction;
-
-    /// <summary>
-    ///     Display-only action showing the clean water tank level via the cooldown sweep animation.
-    /// </summary>
-    [DataField]
-    public EntityUid? CleanGaugeAction;
-
-    /// <summary>
-    ///     Display-only action showing the waste tank level via the cooldown sweep animation.
-    /// </summary>
-    [DataField]
-    public EntityUid? WasteGaugeAction;
-}
-
-[Serializable, NetSerializable]
-public enum FloorScrubberBucketMode : byte
-{
-    PourIntoClean,
-    DrawFromWaste
 }
 
 [Serializable, NetSerializable]
