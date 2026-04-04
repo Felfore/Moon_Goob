@@ -121,6 +121,13 @@ public sealed partial class FloorScrubberComponent : Component
     public bool SelfOperator = false;
 
     /// <summary>
+    ///     If true, the standard action buttons will not be added to operators.
+    ///     Set to true if the entity uses external activation (like Borg tools).
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public bool SuppressActions = false;
+
+    /// <summary>
     ///     If true, cleaning can only happen if ActiveOperators is not empty.
     ///     Set to false for automated drones.
     /// </summary>
@@ -171,5 +178,9 @@ public enum FloorScrubberShape : byte
     /// <summary>
     ///     Cleans only in a single line (directionally).
     /// </summary>
-    Line
+    Line,
+    /// <summary>
+    ///    Cleans the tile the scrubber is on and tiles directly in front of it.
+    /// </summary>
+    Frontal
 }

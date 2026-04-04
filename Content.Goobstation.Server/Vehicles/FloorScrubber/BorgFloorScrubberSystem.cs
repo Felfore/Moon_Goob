@@ -22,7 +22,7 @@ public sealed class BorgFloorScrubberSystem : EntitySystem
         SubscribeLocalEvent<BorgModuleFloorScrubberComponent, BorgModuleUninstalledEvent>(OnModuleUninstalled);
     }
 
-    private void OnModuleInstalled(EntityUid uid, BorgModuleFloorScrubberComponent component, ref BorgModuleInstalledEvent args)
+    private void OnModuleInstalled(EntityUid uid, BorgModuleFloorScrubberComponent module, ref BorgModuleInstalledEvent args)
     {
         var chassis = args.ChassisEnt;
         
@@ -34,6 +34,14 @@ public sealed class BorgFloorScrubberSystem : EntitySystem
         scrub.RequiresKey = false;
         scrub.RequiresOperator = false;
         scrub.SelfOperator = true;
+        scrub.SuppressActions = true;
+
+        // Apply config from the module component
+        scrub.CleaningShape = module.CleaningShape;
+        scrub.CleaningAmount = module.CleaningAmount;
+        scrub.VacuumAmount = module.VacuumAmount;
+        scrub.SpeedMultiplier = module.SpeedMultiplier;
+        scrub.ExtraCleaningRange = module.ExtraCleaningRange;
         
         // Ensure solution tanks exist on the chassis. 
         // Parity with VehicleScrubber.

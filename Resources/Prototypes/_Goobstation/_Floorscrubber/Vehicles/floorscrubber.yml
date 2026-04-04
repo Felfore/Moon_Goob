@@ -13,7 +13,7 @@
     vacuumAmount: 5
     speedMultiplier: 0.5
     extraCleaningRange: 1
-    cleaningShape: Cross
+    cleaningShape: Frontal
     cleaningSound: /Audio/Ambience/Objects/server_fans.ogg
     cleaningSoundVolume: -6
     cleaningSoundRange: 5
@@ -46,7 +46,6 @@
           path: /Audio/Effects/Vehicle/vehiclestartup.ogg
           params:
             volume: -3
-  # Physics overrides for heavy industrial feel
   - type: Fixtures
     fixtures:
       fix1:

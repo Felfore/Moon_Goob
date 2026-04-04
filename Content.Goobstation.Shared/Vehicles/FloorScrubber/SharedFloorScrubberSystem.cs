@@ -135,10 +135,13 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
     }
 
     /// <summary>
-    ///     Grants actions to an operator.
+    ///     Grants actions to an operator if not suppressed.
     /// </summary>
     private void AddOperatorEffects(Entity<FloorScrubberComponent> ent, EntityUid operatorEnt)
     {
+        if (ent.Comp.SuppressActions)
+            return;
+ 
         _actions.AddAction(operatorEnt, ref ent.Comp.CleanAction, "ActionFloorScrubberToggle", ent);
         _actions.AddAction(operatorEnt, ref ent.Comp.DumpDrainAction, "ActionFloorScrubberDumpDrain", ent);
         _actions.AddAction(operatorEnt, ref ent.Comp.DumpFloorAction, "ActionFloorScrubberDumpFloor", ent);
@@ -257,10 +260,8 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
                 OnFill((user, scrub), ref fillEv);
                 break;
             case FloorScrubberToolType.DumpDrain:
-                // No specific event for drain-only, we call the shared Fill/Dump logic
-                // and the shared logic handles the proximity.
-                // Wait, OnDumpDrain is not implemented in Shared, let's see why.
-                // Ah, OnDumpFloor is. Let's use that logic.
+                var drainEv = new FloorScrubberDumpDrainActionEvent { Performer = user };
+                RaiseLocalEvent(user, drainEv);
                 break;
             case FloorScrubberToolType.DumpFloor:
                 var dumpEv = new FloorScrubberDumpFloorActionEvent { Performer = user };
@@ -555,22 +556,28 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
                 break;
 
             case FloorScrubberShape.Line:
+            case FloorScrubberShape.Frontal:
                 targetTiles.Add(centerTile);
-                // Calculate perpendicular direction based on scrubber rotation.
-                var rotation = _transform.GetWorldRotation(ent.Owner);
-                var worldVec = rotation.ToVec();
-                var perpDir = new Vector2(-worldVec.Y, worldVec.X);
-                // Snap to best cardinal for logic simplicity on grid.
+                // Calculate direction relative to the grid rotation.
+                var gridRot = _transform.GetWorldRotation(gridUid);
+                var entRot = _transform.GetWorldRotation(ent.Owner);
+                var relativeRot = entRot - gridRot;
+
+                if (scrubber.CleaningShape == FloorScrubberShape.Frontal)
+                    relativeRot -= Angle.FromDegrees(90);
+
+                var dirVec = relativeRot.ToVec();
                 var step = Vector2i.Zero;
-                if (Math.Abs(perpDir.X) > Math.Abs(perpDir.Y))
-                    step = new Vector2i(perpDir.X > 0 ? 1 : -1, 0);
+                if (Math.Abs(dirVec.X) > Math.Abs(dirVec.Y))
+                    step = new Vector2i(dirVec.X > 0 ? 1 : -1, 0);
                 else
-                    step = new Vector2i(0, perpDir.Y > 0 ? 1 : -1);
+                    step = new Vector2i(0, dirVec.Y > 0 ? 1 : -1);
 
                 for (var i = 1; i <= range; i++)
                 {
                     targetTiles.Add(centerTile + step * i);
-                    targetTiles.Add(centerTile - step * i);
+                    if (scrubber.CleaningShape == FloorScrubberShape.Line)
+                        targetTiles.Add(centerTile - step * i);
                 }
                 break;
         }

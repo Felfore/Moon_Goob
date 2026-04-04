@@ -17,6 +17,11 @@
     - BorgScrubberFlushTool
     - BorgScrubberPurgeTool
   - type: BorgModuleFloorScrubber
+    cleaningShape: Frontal
+    cleaningAmount: 2
+    vacuumAmount: 5
+    speedMultiplier: 0.5
+    extraCleaningRange: 1
   - type: BorgModuleIcon
     icon: { sprite: Interface/Actions/actions_borg.rsi, state: no-action }
 
@@ -27,7 +32,7 @@
   description: Toggles the internal floor scrubber.
   components:
   - type: Sprite
-    sprite: _Goobstation\Actions\medigun.rsi
+    sprite: _Goobstation/Actions/medigun.rsi
     state: activate
   - type: FloorScrubberTool
     mode: Toggle
