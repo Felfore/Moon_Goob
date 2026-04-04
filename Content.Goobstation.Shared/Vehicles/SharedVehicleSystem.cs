@@ -14,6 +14,7 @@ using System.Numerics;
 using Content.Shared._vg.TileMovement;
 using Content.Shared.Access.Components;
 using Content.Shared.Access.Systems;
+using Content.Shared.Light.Components;
 using Content.Shared.Actions;
 using Content.Shared.Audio;
 using Content.Shared.Buckle;
@@ -49,6 +50,7 @@ public abstract partial class SharedVehicleSystem : EntitySystem
 
     private static readonly EntProtoId HornActionId = "ActionHorn";
     private static readonly EntProtoId SirenActionId = "ActionSiren";
+    private static readonly EntProtoId ToggleLightActionId = "ActionToggleLight";
 
     public override void Initialize()
     {
@@ -232,26 +234,16 @@ public abstract partial class SharedVehicleSystem : EntitySystem
             _actions.AddAction(driver, ref vehicleComp.HornAction, HornActionId, vehicle);
         if (vehicleComp.SirenSound != null)
             _actions.AddAction(driver, ref vehicleComp.SirenAction, SirenActionId, vehicle);
+        if (HasComp<UnpoweredFlashlightComponent>(vehicle))
+            _actions.AddAction(driver, ref vehicleComp.LightAction, ToggleLightActionId, vehicle);
     }
 
     private void Mount(EntityUid driver, EntityUid vehicle)
     {
         _mover.SetRelay(driver, vehicle);
 
-        // Bug workaround: TileFrictionController applies tile friction as physics damping
-        // (LinearDamping/AngularDamping) to all awake Dynamic bodies every tick — UNLESS
-        // the entity is mob-moved (UseMobMovement returns true), in which case it's skipped.
-        //
-        // The damping value is: TileFrictionModifier CVar (8.0) × tile friction (~1.0)
-        //   × MovementSpeedModifierComponent.BaseFriction (via TileFrictionEvent/OnTileFriction).
-        //
-        // When a vehicle is being pulled or idle, UseMobMovement is false, so the controller
-        // sets damping to this high value. When a driver mounts, UseMobMovement becomes true
-        // and the controller starts skipping the entity — but never resets the damping.
-        // The stale high damping persists and fights all movement.
-        //
-        // Severity scales with BaseFriction: ATV (0.2) → damping ~2.4 (barely noticeable),
-        // floor scrubber (2.0) → damping ~24 (virtually immobile).
+        // Bug workaround: TileFrictionController applies high damping after the vehicle is pulled, but fails to reset it
+
         if (TryComp<PhysicsComponent>(vehicle, out var body))
         {
             // 0.2f is the default field value from PhysicsComponent.LinearDamping / AngularDamping.
@@ -281,6 +273,8 @@ public abstract partial class SharedVehicleSystem : EntitySystem
             _actions.RemoveAction(driver, vehicleComp.HornAction);
         if (vehicleComp.SirenAction != null)
             _actions.RemoveAction(driver, vehicleComp.SirenAction);
+        if (vehicleComp.LightAction != null)
+            _actions.RemoveAction(driver, vehicleComp.LightAction);
 
         _virtualItem.DeleteInHandsMatching(driver, vehicle);
 

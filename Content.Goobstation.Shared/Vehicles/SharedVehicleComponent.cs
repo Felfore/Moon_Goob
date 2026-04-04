@@ -28,6 +28,9 @@ public sealed partial class VehicleComponent : Component
     [ViewVariables]
     public EntityUid? SirenAction;
 
+    [ViewVariables]
+    public EntityUid? LightAction;
+
     public bool SirenEnabled = false;
 
     public EntityUid? SirenStream;
