@@ -17,6 +17,11 @@
     cleaningSound: /Audio/Ambience/Objects/server_fans.ogg
     cleaningSoundVolume: -6
     cleaningSoundRange: 5
+  - type: Vehicle
+    hornSound:
+      collection: BikeHorn
+      params:
+        variation: 0.125
   - type: FootprintOwner
     bodyDistance: 0.9
     maxBodyVolume: 15
@@ -46,6 +51,21 @@
           path: /Audio/Effects/Vehicle/vehiclestartup.ogg
           params:
             volume: -3
+  - type: UnpoweredFlashlight
+  - type: PointLight
+    enabled: false
+    mask: /Textures/Effects/LightMasks/cone.png
+    autoRot: true
+    radius: 3.5
+    softness: 2
+    netsync: false
+  - type: Repairable
+    damage:
+      types:
+        Blunt: -10
+        Structural: -20
+    fuelCost: 5
+    doAfterDelay: 5
   - type: Fixtures
     fixtures:
       fix1:

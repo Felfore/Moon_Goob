@@ -20,6 +20,7 @@ public sealed class BorgFloorScrubberSystem : EntitySystem
 
         SubscribeLocalEvent<BorgModuleFloorScrubberComponent, BorgModuleInstalledEvent>(OnModuleInstalled);
         SubscribeLocalEvent<BorgModuleFloorScrubberComponent, BorgModuleUninstalledEvent>(OnModuleUninstalled);
+        SubscribeLocalEvent<BorgModuleFloorScrubberComponent, BorgModuleUnselectedEvent>(OnModuleUnselected);
     }
 
     private void OnModuleInstalled(EntityUid uid, BorgModuleFloorScrubberComponent module, ref BorgModuleInstalledEvent args)
@@ -74,5 +75,12 @@ public sealed class BorgFloorScrubberSystem : EntitySystem
             // Remove component to prevent further logic
             RemComp<FloorScrubberComponent>(chassis);
         }
+    }
+
+    private void OnModuleUnselected(EntityUid uid, BorgModuleFloorScrubberComponent component, ref BorgModuleUnselectedEvent args)
+    {
+        var chassis = args.Chassis;
+        // Automatically stop cleaning when module is unselected from the active slot
+        _scrubber.SetCleaningEnabled(chassis, false);
     }
 }
