@@ -11,7 +11,6 @@ namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
 ///     Uses two large internal solution tanks: one for clean water, one for waste.
 /// </summary>
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState]
-[Access(typeof(SharedFloorScrubberSystem))]
 public sealed partial class FloorScrubberComponent : Component
 {
     /// <summary>
@@ -100,6 +99,34 @@ public sealed partial class FloorScrubberComponent : Component
     [DataField]
     public float CleaningAccumulator;
 
+    /// <summary>
+    ///     List of entities currently receiving HUD updates and state changes.
+    ///     This decoupled list allows vehicles, borgs, and bots to use the same logic.
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public List<EntityUid> ActiveOperators = new();
+
+    /// <summary>
+    ///     If true, the toggle logic will require an item in the 'key_slot'.
+    ///     Set to false for self-operating entities like Borgs.
+    /// </summary>
+    [DataField]
+    public bool RequiresKey = true;
+ 
+    /// <summary>
+    ///     If true, the entity itself will be added to the ActiveOperators list.
+    ///     Set to true for cyborg modules.
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public bool SelfOperator = false;
+
+    /// <summary>
+    ///     If true, cleaning can only happen if ActiveOperators is not empty.
+    ///     Set to false for automated drones.
+    /// </summary>
+    [DataField]
+    public bool RequiresOperator = true;
+
     // --- Action refs ---
 
     /// <summary>
@@ -127,10 +154,22 @@ public sealed partial class FloorScrubberComponent : Component
     public EntityUid? FillAction;
 }
 
+/// <summary>
+///     The shape pattern of the scrubber's cleaning area.
+/// </summary>
 [Serializable, NetSerializable]
 public enum FloorScrubberShape : byte
 {
+    /// <summary>
+    ///     Cleans in a square area (e.g. 3x3 if range is 1).
+    /// </summary>
     Square,
+    /// <summary>
+    ///     Cleans in a cross pattern (horizontal and vertical lines).
+    /// </summary>
     Cross,
+    /// <summary>
+    ///     Cleans only in a single line (directionally).
+    /// </summary>
     Line
 }

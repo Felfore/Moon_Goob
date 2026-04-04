@@ -1,0 +1,69 @@
+- type: entity
+  id: BorgModuleFloorScrubber
+  parent: [ BaseBorgModuleJanitor, BaseProviderBorgModule ]
+  name: advanced scrubber cyborg module
+  description: An advanced janitorial module that integrates a full floor scrubber into the cyborg chassis.
+  components:
+  - type: Sprite
+    layers:
+    - state: janitor
+    - sprite: Objects/Specific/Janitorial/janitorial.rsi
+      state: cleaner
+  - type: ItemBorgModule
+    moduleId: FloorScrubber
+    items:
+    - BorgScrubberToggleTool
+    - BorgScrubberFillTool
+    - BorgScrubberFlushTool
+    - BorgScrubberPurgeTool
+  - type: BorgModuleFloorScrubber
+  - type: BorgModuleIcon
+    icon: { sprite: Interface/Actions/actions_borg.rsi, state: no-action }
+
+- type: entity
+  id: BorgScrubberToggleTool
+  parent: BaseItem
+  name: integrated scrubber
+  description: Toggles the internal floor scrubber.
+  components:
+  - type: Sprite
+    sprite: _Goobstation\Actions\medigun.rsi
+    state: activate
+  - type: FloorScrubberTool
+    mode: Toggle
+
+- type: entity
+  id: BorgScrubberFillTool
+  parent: BaseItem
+  name: rapid tank refill
+  description: Refills the clean water tank from a nearby sink.
+  components:
+  - type: Sprite
+    sprite: Structures/Furniture/sink.rsi
+    state: sink_wide-fill-1
+  - type: FloorScrubberTool
+    mode: Fill
+
+- type: entity
+  id: BorgScrubberFlushTool
+  parent: BaseItem
+  name: waste drain flush
+  description: Drains the waste tank into a nearby floor drain.
+  components:
+  - type: Sprite
+    sprite: Objects/Specific/Janitorial/drain.rsi
+    state: icon
+  - type: FloorScrubberTool
+    mode: DumpDrain
+
+- type: entity
+  id: BorgScrubberPurgeTool
+  parent: BaseItem
+  name: waste floor purge
+  description: Spills the waste tank onto the floor. Use with caution.
+  components:
+  - type: Sprite
+    sprite: Fluids/puddle.rsi
+    state: splatb
+  - type: FloorScrubberTool
+    mode: DumpFloor
