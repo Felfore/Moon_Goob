@@ -26,8 +26,15 @@
     icon: { sprite: Interface/Actions/actions_borg.rsi, state: no-action }
 
 - type: entity
-  id: BorgScrubberToggleTool
+  id: BaseBorgScrubberItem
   parent: BaseItem
+  abstract: true
+  suffix: CyborgOnly
+  categories: [ DoNotMap ]
+
+- type: entity
+  id: BorgScrubberToggleTool
+  parent: BaseBorgScrubberItem
   name: integrated scrubber
   description: Toggles the internal floor scrubber.
   components:
@@ -39,7 +46,7 @@
 
 - type: entity
   id: BorgScrubberFillTool
-  parent: BaseItem
+  parent: BaseBorgScrubberItem
   name: rapid tank refill
   description: Refills the clean water tank from a nearby sink.
   components:
@@ -51,7 +58,7 @@
 
 - type: entity
   id: BorgScrubberFlushTool
-  parent: BaseItem
+  parent: BaseBorgScrubberItem
   name: waste drain flush
   description: Drains the waste tank into a nearby floor drain.
   components:
@@ -63,7 +70,7 @@
 
 - type: entity
   id: BorgScrubberPurgeTool
-  parent: BaseItem
+  parent: BaseBorgScrubberItem
   name: waste floor purge
   description: Spills the waste tank onto the floor. Use with caution.
   components:
