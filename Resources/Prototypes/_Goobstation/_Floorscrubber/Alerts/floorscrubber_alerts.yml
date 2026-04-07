@@ -1,0 +1,59 @@
+- type: alert
+  id: FloorScrubberClean
+  icons:
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank0
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank1
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank2
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank3
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank4
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank5
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank6
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank7
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank8
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank9
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/watertank.rsi
+    state: watertank10
+  name: alerts-floor-scrubber-clean-name
+  description: alerts-floor-scrubber-clean-desc
+  minSeverity: 0
+  maxSeverity: 10
+
+- type: alert
+  id: FloorScrubberWaste
+  icons:
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank0
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank1
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank2
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank3
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank4
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank5
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank6
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank7
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank8
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank9
+  - sprite: /Textures/_Goobstation/_floorscrubber/Interface/Alerts/wastetank.rsi
+    state: wastetank10
+  name: alerts-floor-scrubber-waste-name
+  description: alerts-floor-scrubber-waste-desc
+  minSeverity: 0
+  maxSeverity: 10
