@@ -20,10 +20,12 @@ using Robust.Shared.Audio;
 using Robust.Shared.Audio.Systems;
 using Robust.Shared.Containers;
 using Robust.Shared.GameObjects;
-using Robust.Shared.GameStates;
 using Content.Shared.Interaction.Events;
+using Content.Shared.Interaction;
+using Robust.Shared.GameStates;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
+using Robust.Shared.Network;
 using Robust.Shared.Prototypes;
 using Robust.Shared.Timing;
 using Robust.Shared.Utility;
@@ -58,6 +60,7 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
     [Dependency] private readonly SharedTransformSystem _transform = default!;
     [Dependency] private readonly AlertsSystem _alerts = default!;
     [Dependency] private readonly SharedDoAfterSystem _doAfter = default!;
+    [Dependency] private readonly INetManager _net = default!;
 
     /// <summary>
     ///     Pooled collection to prevent allocations during tile cleaning logic.
@@ -83,6 +86,7 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberFillDoAfterEvent>(OnFillDoAfter);
 
         SubscribeLocalEvent<FloorScrubberToolComponent, UseInHandEvent>(OnUseInHandEvent);
+        SubscribeLocalEvent<FloorScrubberComponent, InteractUsingEvent>(OnInteractUsing);
     }
 
     /// <summary>
@@ -123,7 +127,7 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
                 ent.Comp.ActiveOperators.Add(occupant);
             }
         }
- 
+
         // 1.5 Add self if SelfOperator is true
         if (ent.Comp.SelfOperator)
         {
@@ -155,7 +159,7 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
     {
         if (ent.Comp.SuppressActions)
             return;
- 
+
         _actions.AddAction(operatorEnt, ref ent.Comp.CleanAction, "ActionFloorScrubberToggle", ent);
         _actions.AddAction(operatorEnt, ref ent.Comp.DumpDrainAction, "ActionFloorScrubberDumpDrain", ent);
         _actions.AddAction(operatorEnt, ref ent.Comp.DumpFloorAction, "ActionFloorScrubberDumpFloor", ent);
@@ -536,6 +540,55 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
     }
 
     /// <summary>
+    ///     Intercepts interactions with containers to provide useful customized popups
+    ///     when attempting to pour or failing to draw. Let native DrainableSolution handle the core drawing.
+    /// </summary>
+    private void OnInteractUsing(Entity<FloorScrubberComponent> ent, ref InteractUsingEvent args)
+    {
+        if (args.Handled)
+            return;
+
+        var used = args.Used;
+        var user = args.User;
+
+        if (!_solutionContainer.TryGetDrainableSolution(ent.Owner, out _, out var wasteSoln))
+            return;
+
+        _solutionContainer.TryGetDrainableSolution(used, out _, out var bucketDrainSoln);
+        _solutionContainer.TryGetRefillableSolution(used, out _, out var bucketRefillSoln);
+
+        // Not a fluid container, ignore.
+        if (bucketDrainSoln == null && bucketRefillSoln == null)
+            return;
+
+        // Will the native system successfully draw waste into the bucket?
+        bool canDraw = wasteSoln.Volume > 0 && bucketRefillSoln != null && bucketRefillSoln.AvailableVolume > 0;
+        if (canDraw)
+            return; // Let the native system handle the successful interaction undisturbed.
+
+        // Native system will fail to draw. 
+        // Provide custom popups instead of generic ones.
+        
+        // If the container has capacity but the waste is empty, they are trying to draw.
+        if (wasteSoln.Volume <= 0 && bucketRefillSoln != null && bucketRefillSoln.AvailableVolume > 0)
+        {
+            if (_timing.IsFirstTimePredicted)
+                _popup.PopupEntity(Loc.GetString("floor-scrubber-waste-empty"), ent.Owner, user);
+            args.Handled = true;
+            return;
+        }
+
+        // If the container has liquid and they are using it on the scrubber, they are trying to pour.
+        if (bucketDrainSoln != null && bucketDrainSoln.Volume > 0)
+        {
+            if (_timing.IsFirstTimePredicted)
+                _popup.PopupEntity(Loc.GetString("floor-scrubber-refill-sink"), ent.Owner, user);
+            args.Handled = true;
+            return;
+        }
+    }
+
+    /// <summary>
     ///     Modifies movement speed based on whether the scrubber is cleaning.
     /// </summary>
     private void OnRefreshMovementSpeedModifiersEvent(Entity<FloorScrubberComponent> ent, ref RefreshMovementSpeedModifiersEvent args)
@@ -762,22 +815,29 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
                     }
                 }
 
-                if (isFootprint)
+                // Apply changes to unpredicted entities ONLY on the server to prevent visual desync/flicker.
+                if (_net.IsServer)
                 {
-                    RaiseLocalEvent(entity, new FootprintCleanEvent());
-                    changed = true;
-                }
-
-                // 2. Vacuum Puddle solutions
-                if (TryComp<PuddleComponent>(entity, out var puddle) &&
-                    _solutionContainer.TryGetSolution(entity, "puddle", out var puddleSolnEnt, out var puddleSolution))
-                {
-                    var drawAmount = FixedPoint2.Min(scrubber.VacuumAmount, puddleSolution.Volume, wasteSolution.AvailableVolume);
-                    if (drawAmount > 0)
+                    if (isFootprint)
                     {
-                        var removed = _solutionContainer.SplitSolution(puddleSolnEnt.Value, drawAmount);
-                        _solutionContainer.TryAddSolution(wasteSolnEnt.Value, removed);
+                        RaiseLocalEvent(entity, new FootprintCleanEvent());
                         changed = true;
+                    }
+
+                    // 2. Vacuum Puddle solutions
+                    if (TryComp<PuddleComponent>(entity, out var puddle) &&
+                        _solutionContainer.TryGetSolution(entity, "puddle", out var puddleSolnEnt, out var puddleSolution))
+                    {
+                        var drawAmount = FixedPoint2.Min(scrubber.VacuumAmount, puddleSolution.Volume, wasteSolution.AvailableVolume);
+                        if (drawAmount > 0)
+                        {
+                            var removed = _solutionContainer.SplitSolution(puddleSolnEnt.Value, drawAmount);
+                            _solutionContainer.TryAddSolution(wasteSolnEnt.Value, removed);
+                            changed = true;
+
+                            if (puddleSolution.Volume <= 0)
+                                QueueDel(entity);
+                        }
                     }
                 }
             }
@@ -793,7 +853,7 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
             {
                 // We keep a consistent small amount (e.g., 2u) in the print tank to draw from.
                 var targetAmount = FixedPoint2.New(2);
-                
+
                 if (printSolnEnt.Value.Comp.Solution.Volume < targetAmount)
                 {
                     var amount = FixedPoint2.Min(targetAmount - printSolnEnt.Value.Comp.Solution.Volume, cleanSolution.Volume);
@@ -809,17 +869,20 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
             var decals = _decal.GetDecalsInRange(gridUid, centerTileLocal, lookupRadius);
             var anyCleaned = false;
 
-            foreach (var (decalId, decal) in decals)
+            if (_net.IsServer)
             {
-                if (!decal.Cleanable)
-                    continue;
+                foreach (var (decalId, decal) in decals)
+                {
+                    if (!decal.Cleanable)
+                        continue;
 
-                var decalPos = _map.LocalToTile(gridUid, grid, new EntityCoordinates(gridUid, decal.Coordinates));
-                if (!targetTiles.Contains(decalPos))
-                    continue;
+                    var decalPos = _map.LocalToTile(gridUid, grid, new EntityCoordinates(gridUid, decal.Coordinates));
+                    if (!targetTiles.Contains(decalPos))
+                        continue;
 
-                _decal.RemoveDecal(gridUid, decalId);
-                anyCleaned = true;
+                    _decal.RemoveDecal(gridUid, decalId);
+                    anyCleaned = true;
+                }
             }
 
             if (anyCleaned)

@@ -42,7 +42,6 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
 
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpDrainActionEvent>(OnDumpDrain);
         SubscribeLocalEvent<FloorScrubberComponent, FloorScrubberDumpDrainDoAfterEvent>(OnDumpDrainDoAfter);
-        SubscribeLocalEvent<FloorScrubberComponent, AfterInteractUsingEvent>(OnBucketInteract);
     }
 
     // ── Dump to drain ──────────────────────────────────────────────────────────
@@ -140,105 +139,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         UpdateAlerts(ent.Owner);
     }
 
-    /// <summary>
-    ///     Handles interactions from containers (buckets, beakers) to refill or drain the tanks.
-    /// </summary>
-    private void OnBucketInteract(Entity<FloorScrubberComponent> ent, ref AfterInteractUsingEvent args)
-    {
-        if (args.Handled || !args.CanReach)
-            return;
 
-        var used = args.Used;
-
-        // Only handle entities that can drain (e.g. buckets, beakers).
-        if (!_solutionContainer.TryGetDrainableSolution(used, out var bucketSolnEnt, out var bucketSoln))
-            return;
-
-        var user = args.User;
-
-        if (bucketSoln.Volume > 0)
-        {
-            // --- Refill / Dump Mode ---
-
-            // Edge Case: Check if it's "Pure Water" (nothing but Water).
-            // This ensures the clean tank never gets contaminated.
-            var isPureWater = true;
-            foreach (var reagent in bucketSoln.Contents)
-            {
-                if (reagent.Reagent.Prototype != "Water")
-                {
-                    isPureWater = false;
-                    break;
-                }
-            }
-
-            if (isPureWater)
-            {
-                // Refill Clean Tank
-                if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.CleanSolutionName, out var cleanSolnEnt, out var cleanSoln))
-                    return;
-
-                var toTransfer = FixedPoint2.Min(bucketSoln.Volume, cleanSoln.AvailableVolume);
-                if (toTransfer <= 0)
-                {
-                    _popup.PopupEntity(Loc.GetString("floor-scrubber-fill-full"), ent.Owner, user);
-                }
-                else
-                {
-                    var poured = _solutionContainer.SplitSolution(bucketSolnEnt.Value, toTransfer);
-                    _solutionContainer.TryAddSolution(cleanSolnEnt.Value, poured);
-                    _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-poured", ("amount", toTransfer)), ent.Owner, user);
-                }
-            }
-            else
-            {
-                // Dump into Waste Tank
-                if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out var wasteSolnEnt, out var wasteSoln))
-                    return;
-
-                var toTransfer = FixedPoint2.Min(bucketSoln.Volume, wasteSoln.AvailableVolume);
-                if (toTransfer <= 0)
-                {
-                    _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-waste-full"), ent.Owner, user);
-                }
-                else
-                {
-                    var poured = _solutionContainer.SplitSolution(bucketSolnEnt.Value, toTransfer);
-                    _solutionContainer.TryAddSolution(wasteSolnEnt.Value, poured);
-                    _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-poured-waste", ("amount", toTransfer)), ent.Owner, user);
-                }
-            }
-        }
-        else
-        {
-            // --- Draw Mode (Empty container) ---
-
-            // Draw waste into bucket.
-            if (!_solutionContainer.TryGetSolution(ent.Owner, ent.Comp.WasteSolutionName, out var wasteSolnEnt, out var wasteSoln))
-                return;
-
-            // Bucket needs to be refillable to receive waste.
-            if (!_solutionContainer.TryGetRefillableSolution(used, out var bucketRefillEnt, out var bucketRefill))
-                return;
-
-            var toTransfer = FixedPoint2.Min(wasteSoln.Volume, bucketRefill.AvailableVolume);
-            if (toTransfer <= 0)
-            {
-                if (wasteSoln.Volume <= 0)
-                    _popup.PopupEntity(Loc.GetString("floor-scrubber-dump-drain-empty"), ent.Owner, user);
-                else
-                    _popup.PopupEntity(Loc.GetString("bucket-full"), used, user);
-                return;
-            }
-
-            var drawn = _solutionContainer.SplitSolution(wasteSolnEnt.Value, toTransfer);
-            _solutionContainer.TryAddSolution(bucketRefillEnt.Value, drawn);
-            _popup.PopupEntity(Loc.GetString("floor-scrubber-bucket-drawn", ("amount", toTransfer)), ent.Owner, user);
-        }
-
-        args.Handled = true;
-        UpdateAlerts(ent.Owner);
-    }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 

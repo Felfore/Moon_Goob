@@ -39,10 +39,8 @@ floor-scrubber-fill-no-source = No water source nearby.
 floor-scrubber-fill-success = Water tank filled from {$source}.
 
 # Bucket interaction messages
-floor-scrubber-bucket-poured = Poured {$amount}u into the water tank.
-floor-scrubber-bucket-poured-waste = Dumped {$amount}u into the waste tank.
-floor-scrubber-bucket-drawn = Drew {$amount}u of waste into the container.
-floor-scrubber-dump-waste-full = The waste tank is full.
+floor-scrubber-refill-sink = Refill the scrubber at a sink!
+floor-scrubber-waste-empty = The waste tank is empty.
 
 # Full tank notification
 floor-scrubber-waste-full = Waste tank full! Stopping scrubber...
