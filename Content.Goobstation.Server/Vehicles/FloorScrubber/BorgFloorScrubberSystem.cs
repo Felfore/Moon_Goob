@@ -31,18 +31,8 @@ public sealed class BorgFloorScrubberSystem : EntitySystem
         // EnsureComp will add or get.
         var scrub = EnsureComp<FloorScrubberComponent>(chassis);
         
-        // Goobstation - Decoupled config: Disable vehicle-specific requirements
-        scrub.RequiresKey = false;
-        scrub.RequiresOperator = false;
-        scrub.SelfOperator = true;
-        scrub.SuppressActions = true;
-
-        // Apply config from the module component
-        scrub.CleaningShape = module.CleaningShape;
-        scrub.CleaningAmount = module.CleaningAmount;
-        scrub.VacuumAmount = module.VacuumAmount;
-        scrub.SpeedMultiplier = module.SpeedMultiplier;
-        scrub.ExtraCleaningRange = module.ExtraCleaningRange;
+        // Apply config using proxy method due to Access restrictions on the component
+        _scrubber.SetupBorgMode((chassis, scrub), module);
         
         // Ensure solution tanks exist on the chassis. 
         // Parity with VehicleScrubber.
@@ -69,7 +59,7 @@ public sealed class BorgFloorScrubberSystem : EntitySystem
             _scrubber.SetCleaningEnabled(chassis, false);
             
             // Remove operator alerts for the borg
-            scrub.SelfOperator = false;
+            _scrubber.TeardownBorgMode((chassis, scrub));
             _scrubber.UpdateOperators((chassis, scrub));
             
             // Remove component to prevent further logic

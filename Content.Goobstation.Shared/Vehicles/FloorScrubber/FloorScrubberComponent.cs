@@ -10,7 +10,7 @@ namespace Content.Goobstation.Shared.Vehicles.FloorScrubber;
 ///     Component for an entity that can scrub decals and vacuum puddles.
 ///     Uses two large internal solution tanks: one for clean water, one for waste.
 /// </summary>
-[RegisterComponent, NetworkedComponent, AutoGenerateComponentState]
+[RegisterComponent, NetworkedComponent, AutoGenerateComponentState, Access(typeof(SharedFloorScrubberSystem))]
 public sealed partial class FloorScrubberComponent : Component
 {
     /// <summary>

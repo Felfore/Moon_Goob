@@ -39,3 +39,13 @@ public sealed partial class FloorScrubberFillActionEvent : InstantActionEvent
 public sealed partial class FloorScrubberDumpDrainDoAfterEvent : SimpleDoAfterEvent
 {
 }
+
+[Serializable, NetSerializable]
+public sealed partial class FloorScrubberDumpFloorDoAfterEvent : SimpleDoAfterEvent
+{
+}
+
+[Serializable, NetSerializable]
+public sealed partial class FloorScrubberFillDoAfterEvent : SimpleDoAfterEvent
+{
+}

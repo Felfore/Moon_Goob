@@ -18,7 +18,7 @@ using Robust.Shared.Prototypes;
 using Robust.Shared.Serialization;
 using Robust.Shared.Timing;
 
-namespace Content.Server.Vehicles.FloorScrubber;
+namespace Content.Goobstation.Server.Vehicles.FloorScrubber;
 
 public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
 {
@@ -73,7 +73,7 @@ public sealed class FloorScrubberSystem : SharedFloorScrubberSystem
         }
 
         // Both checks passed — start doAfter on the scrubber entity itself.
-        var doAfterArgs = new DoAfterArgs(EntityManager, user, 2f,
+        var doAfterArgs = new DoAfterArgs(EntityManager, user, 3f,
             new FloorScrubberDumpDrainDoAfterEvent(), ent.Owner)
         {
             BreakOnMove = true,
