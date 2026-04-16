@@ -1,13 +1,35 @@
 - type: entity
+  id: VehicleScrubberOverlay
+  name: floor scrubber overlay
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    scale: 0.75, 0.75
+    sprite: _Goobstation/_floorscrubber/Objects/Vehicles/floorscrubber.rsi
+    renderOver: North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest
+    layers:
+    - state: overlay
+    noRot: true
+    drawdepth: OverMobs # Renders above players, non-clickable
+  - type: Tag
+    tags:
+      - HideContextMenu
+
+- type: entity
   parent: BaseVehicle
   id: VehicleScrubber
   name: floor scrubber
   description: A janitorial vehicle used to clean and vacuum large areas of floor. Drive over spills with the scrubber active, then dump the waste tank into a nearby drain.
   components:
   - type: Sprite
-    sprite: Objects/Vehicles/janicart.rsi # TODO: Replace with dedicated floor scrubber sprite
-    state: vehicle
+    scale: 0.75, 0.75
+    sprite: _Goobstation/_floorscrubber/Objects/Vehicles/floorscrubber.rsi
+    layers:
+    - state: floorscrubber
     noRot: true
+  - type: Vehicle
+    overlayPrototype: VehicleScrubberOverlay
+  - type: Appearance
   - type: FloorScrubber
     cleaningAmount: 2
     vacuumAmount: 5
