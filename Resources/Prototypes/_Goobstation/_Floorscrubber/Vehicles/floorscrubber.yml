@@ -6,14 +6,23 @@
   - type: Sprite
     scale: 0.75, 0.75
     sprite: _Goobstation/_floorscrubber/Objects/Vehicles/floorscrubber.rsi
-    renderOver: North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest
     layers:
-    - state: overlay
+      - state: overlay
+      - state: cleaning
+        map: [ "cleaningLayer" ]
+        visible: false
     noRot: true
     drawdepth: OverMobs # Renders above players, non-clickable
   - type: Tag
     tags:
       - HideContextMenu
+  - type: Appearance
+  - type: GenericVisualizer
+    visuals:
+      enum.FloorScrubberVisuals.Cleaning:
+        cleaningLayer:
+          Off: { visible: false }
+          On:  { visible: true }
 
 - type: entity
   parent: BaseVehicle

@@ -16,6 +16,7 @@ using Content.Shared.Fluids;
 using Content.Shared.Fluids.Components;
 using Content.Shared.Alert;
 using Content.Goobstation.Common.Footprints;
+using Content.Goobstation.Shared.Vehicles;
 using Robust.Shared.Audio;
 using Robust.Shared.Audio.Systems;
 using Robust.Shared.Containers;
@@ -61,6 +62,7 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
     [Dependency] private readonly AlertsSystem _alerts = default!;
     [Dependency] private readonly SharedDoAfterSystem _doAfter = default!;
     [Dependency] private readonly INetManager _net = default!;
+    [Dependency] private readonly SharedAppearanceSystem _appearance = default!;
 
     /// <summary>
     ///     Pooled collection to prevent allocations during tile cleaning logic.
@@ -244,6 +246,13 @@ public abstract partial class SharedFloorScrubberSystem : EntitySystem
 
         _movementSpeed.RefreshMovementSpeedModifiers(ent.Owner);
         Dirty(ent);
+
+        // Drive the cleaning animation overlay.
+        if (TryComp<VehicleComponent>(ent.Owner, out var vehicle) && vehicle.ActiveOverlay.HasValue)
+        {
+            var state = enabled ? FloorScrubberCleaningVisualState.On : FloorScrubberCleaningVisualState.Off;
+            _appearance.SetData(vehicle.ActiveOverlay.Value, FloorScrubberVisuals.Cleaning, state);
+        }
 
         // Update alerts to show/reset severity if we stopped due to a full tank etc.
         UpdateAlerts(ent.Owner);
